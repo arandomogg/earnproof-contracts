@@ -36,10 +36,8 @@
 /// Whether a code is returned by the current release.
 ///
 /// A code can be declared in an error enum without any contract path returning
-/// it. Publishing that distinction matters: a client that waits for
-/// [`ContractError::ProtocolPaused`][crate::ContractError::ProtocolPaused] on a
-/// paused protocol waits forever, because the proof registry currently reports
-/// a paused protocol through `InvalidSchemaVersion` instead.
+/// it. Publishing that distinction matters: for example, [`ProofError::MalformedInput`]
+/// is declared and reserved but returned by no path in the current release.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Status {
     /// At least one contract path returns this code in the current release.
@@ -157,7 +155,7 @@ pub struct ErrorSpec {
 }
 
 /// Every published error, ordered by code.
-pub const ERROR_CATALOG: [ErrorSpec; 21] = [
+pub const ERROR_CATALOG: [ErrorSpec; 25] = [
     ErrorSpec {
         code: 1,
         name: "AlreadyInitialized",
@@ -409,6 +407,54 @@ pub const ERROR_CATALOG: [ErrorSpec; 21] = [
         remediation: "A protocol operator must approve the version. A registry pointed at an uninitialized protocol config also returns this code, because no version can be approved there.",
         http_status: 400,
         client_message: "Schema version not approved",
+    },
+    ErrorSpec {
+        code: 307,
+        name: "ContractPaused",
+        enum_name: "ProofError",
+        domain: Domain::ProofRegistry,
+        status: Status::Returned,
+        cause: "The proof registry detected that the protocol is paused and rejected proof registration.",
+        retry: Retry::AfterOperatorAction,
+        remediation: "Call is_paused on the protocol config contract to check if the pause is active. An operator must unpause the protocol to allow proof registration to resume.",
+        http_status: 503,
+        client_message: "Contract is paused",
+    },
+    ErrorSpec {
+        code: 308,
+        name: "IssuerInactive",
+        enum_name: "ProofError",
+        domain: Domain::ProofRegistry,
+        status: Status::Returned,
+        cause: "The issuer address is not active or was suspended.",
+        retry: Retry::AfterOperatorAction,
+        remediation: "Call is_active_address on the issuer registry to confirm the issuer is active. An operator must reactivate the issuer if it was suspended.",
+        http_status: 403,
+        client_message: "Issuer is not active",
+    },
+    ErrorSpec {
+        code: 309,
+        name: "UnsupportedSchema",
+        enum_name: "ProofError",
+        domain: Domain::ProofRegistry,
+        status: Status::Returned,
+        cause: "The proof schema identifier is not supported or not registered in the protocol config.",
+        retry: Retry::AfterOperatorAction,
+        remediation: "Call is_schema_version_approved on the protocol config contract to verify the schema version is approved. An operator must approve the schema version before it can be used for proof registration.",
+        http_status: 400,
+        client_message: "Schema not supported",
+    },
+    ErrorSpec {
+        code: 310,
+        name: "MalformedInput",
+        enum_name: "ProofError",
+        domain: Domain::ProofRegistry,
+        status: Status::Reserved,
+        cause: "Reserved for when proof input data fails format or size validation. No contract path currently returns this code; it is allocated so the code is never reused for a different meaning.",
+        retry: Retry::AfterCallerChange,
+        remediation: "Validate the proof input data against the schema before resubmitting. Ensure all required fields are present and data sizes conform to the schema limits.",
+        http_status: 400,
+        client_message: "Malformed proof input",
     },
 ];
 

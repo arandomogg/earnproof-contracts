@@ -112,6 +112,26 @@ fn declared_variants() -> std::vec::Vec<(&'static str, &'static str, u32)> {
             "SchemaVersionNotApproved",
             ProofError::SchemaVersionNotApproved as u32,
         ),
+        (
+            "ProofError",
+            "ContractPaused",
+            ProofError::ContractPaused as u32,
+        ),
+        (
+            "ProofError",
+            "IssuerInactive",
+            ProofError::IssuerInactive as u32,
+        ),
+        (
+            "ProofError",
+            "UnsupportedSchema",
+            ProofError::UnsupportedSchema as u32,
+        ),
+        (
+            "ProofError",
+            "MalformedInput",
+            ProofError::MalformedInput as u32,
+        ),
     ]
 }
 

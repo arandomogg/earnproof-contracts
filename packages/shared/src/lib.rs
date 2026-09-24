@@ -9,11 +9,23 @@ pub mod error_catalog;
 
 pub use error_catalog::{Domain, ErrorSpec, Retry, Status, ERROR_CATALOG};
 
+// Export upgrade approval types for use across all contracts
+pub use soroban_sdk::String as SorobanString;
+
 pub const TTL_THRESHOLD_LEDGERS: u32 = 50_000;
 
 /// Target ledgers for extended TTL after triggering a preemptive extension.
 pub const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
 
+/// Minimum ledgers between approval and execution (timelock).
+/// Prevents immediate execution of just-approved upgrades.
+/// ~1 day at 5s/ledger = 17,280 ledgers
+pub const UPGRADE_TIMELOCK_LEDGERS: u32 = 17_280;
+
+/// Maximum ledgers an approval remains valid after creation.
+/// Stale approvals expire and must be re-approved.
+/// ~30 days at 5s/ledger = 518_400 ledgers
+pub const UPGRADE_APPROVAL_EXPIRY_LEDGERS: u32 = 518_400;
 /// Storage layout version for the migration checkpoint record.
 pub const MIGRATION_STATUS_VERSION: u32 = 1;
 
@@ -203,6 +215,13 @@ pub enum ContractError {
 
     // Protocol state errors (80-99)
     ProtocolPaused = 80,
+
+    // Upgrade timing errors (90-99)
+    NoUpgradeApproval = 90,
+    UpgradeTimelockNotElapsed = 91,
+    UpgradeApprovalExpired = 92,
+    WasmHashMismatch = 93,
+    InvalidTimingConfig = 94,
 }
 
 /// Issuer-specific errors (200-299).
@@ -232,6 +251,23 @@ pub enum ProofError {
     InvalidSchemaVersion = 304,
     SchemaVersionNotApproved = 305,
     InvalidAddress = 306,
+    // Separated precondition errors (307-310)
+    /// Contract is paused — proof registration is temporarily disabled.
+    /// Recovery: monitor for unpause event before retrying.
+    ContractPaused = 307,
+    /// Issuer account is not active or not authorized to register proofs.
+    /// Distinct from authorization failure — the issuer exists but is inactive.
+    /// Recovery: contact platform to activate the issuer account.
+    IssuerInactive = 308,
+    /// The proof schema identifier is not supported or not registered.
+    /// Distinct from malformed input — the schema reference is well-formed
+    /// but unknown to this contract.
+    /// Recovery: check supported schemas via get_supported_schemas().
+    UnsupportedSchema = 309,
+    /// Proof input data is malformed — fails format or size validation.
+    /// Distinct from unsupported schema — the input itself is invalid.
+    /// Recovery: validate input against the schema before resubmitting.
+    MalformedInput = 310,
 }
 
 #[contracttype]
@@ -247,6 +283,30 @@ pub enum IssuerStatus {
 pub enum ProofStatus {
     Active,
     Revoked,
+}
+
+/// Stores temporal metadata for an upgrade approval.
+///
+/// # Timing invariants
+/// - `created_at` ≤ `earliest_execution` ≤ `expires_at`
+/// - execution is rejected before `earliest_execution`
+/// - execution is rejected at or after `expires_at`
+/// - re-approval resets ALL three fields (no stale reuse)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpgradeApproval {
+    /// WASM hash approved for upgrade
+    pub wasm_hash: BytesN<32>,
+    /// Ledger sequence when approval was created
+    pub created_at: u32,
+    /// Earliest ledger at which execution is permitted
+    /// = created_at + UPGRADE_TIMELOCK_LEDGERS
+    pub earliest_execution: u32,
+    /// Ledger sequence after which approval is invalid
+    /// = created_at + UPGRADE_APPROVAL_EXPIRY_LEDGERS
+    pub expires_at: u32,
+    /// Address that created this approval
+    pub approved_by: Address,
 }
 
 #[contracttype]
@@ -271,6 +331,81 @@ pub struct ProofRecord {
     pub expires_at: u64,
     pub created_at: u64,
     pub revoked_at: u64,
+}
+
+// ── Upgrade Approval Metadata ──────────────────────────────────────────────────
+// Metadata for an upgrade approval, exposed for off-chain verification.
+//
+// This is the single shared structure used across all contracts that
+// implement upgrade approval workflows. Generated clients see a consistent
+// type regardless of which contract they interact with.
+//
+// # Off-chain verification use cases
+// - Verify an upgrade plan matches the approved hash and version
+// - Check the approval window (creation → expiry) to assess staleness
+// - Confirm the execution ledger matches when approval was consumed
+// - Audit which approver authorized the upgrade
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpgradeApprovalMetadata {
+    /// SHA-256 hash of the WASM bytecode approved for upgrade.
+    /// Operators compare this against the upgrade package hash.
+    pub target_hash: BytesN<32>,
+
+    /// Semantic version string of the target contract version.
+    /// Format: "MAJOR.MINOR.PATCH" (e.g. "1.2.0")
+    pub target_version: u32,
+
+    /// Address that submitted and signed this approval.
+    pub approver: Address,
+
+    /// Ledger sequence when the approval was created.
+    pub creation_ledger: u32,
+
+    /// Ledger sequence when the approved upgrade was executed.
+    /// None if the approval has not yet been consumed.
+    pub execution_ledger: Option<u32>,
+
+    /// Ledger sequence after which this approval expires and cannot be used.
+    pub expiry_ledger: u32,
+
+    /// Current status of this approval.
+    pub status: ApprovalStatus,
+}
+
+/// Unambiguous status for an upgrade approval.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ApprovalStatus {
+    /// Approval is valid and within its window.
+    Active,
+
+    /// Approval was used — upgrade has been executed.
+    Executed,
+
+    /// Approval was explicitly revoked before execution.
+    Revoked,
+
+    /// Approval window has passed without execution.
+    Expired,
+}
+
+/// Result of an approval metadata query.
+/// Distinguishes "unknown" from "revoked" unambiguously.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ApprovalQuery {
+    /// Approval exists — metadata included.
+    Found(UpgradeApprovalMetadata),
+
+    /// No approval record exists for this hash.
+    /// Distinct from Revoked — the approval never existed or was pruned.
+    NotFound,
+
+    /// Approval existed but was explicitly revoked.
+    /// Included metadata shows who approved and when, for audit purposes.
+    Revoked(UpgradeApprovalMetadata),
 }
 
 // ── Shared Test Utilities ──────────────────────────────────────────────────────

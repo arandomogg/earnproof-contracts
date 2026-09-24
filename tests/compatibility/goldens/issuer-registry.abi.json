@@ -1,0 +1,383 @@
+{
+  "$schema": "earnproof-contract-abi/v1",
+  "contract": "IssuerRegistryContract",
+  "soroban_sdk_version": "27.0.0",
+  "rust_toolchain": "1.98.0",
+  "generated_from": "Part 1 analysis - synthetic values only",
+  "note": "Golden artifact — update with scripts/update-goldens.sh after intentional breaking changes. Requires version bump and migration note in docs/releases/",
+
+  "functions": [
+    {
+      "name": "initialize",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "admin", "type": "Address" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin.require_auth()",
+      "guards": ["AlreadyInitialized"]
+    },
+    {
+      "name": "get_admin",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<Address, ContractError>",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "register_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" },
+        { "name": "issuer_address", "type": "Address" },
+        { "name": "metadata_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": [
+        "issuer_address is valid principal (not zero/sentinel)",
+        "issuer_id_hash not already registered",
+        "issuer_address not already registered"
+      ],
+      "effects": "creates IssuerRecord with status=Active, emits IssuerRegistered"
+    },
+    {
+      "name": "update_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" },
+        { "name": "metadata_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": "issuer not Revoked",
+      "effects": "updates metadata_hash and updated_at, emits IssuerMetadataUpdated"
+    },
+    {
+      "name": "suspend_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "sets status to Suspended, emits IssuerSuspended"
+    },
+    {
+      "name": "reactivate_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": "issuer not Revoked (InvalidTransition)",
+      "effects": "sets status to Active, emits IssuerReactivated"
+    },
+    {
+      "name": "revoke_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "sets status to Revoked (final), emits IssuerRevoked"
+    },
+    {
+      "name": "rotate_issuer_address",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" },
+        { "name": "new_address", "type": "Address" }
+      ],
+      "output": "Result<(), IssuerError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": [
+        "new_address is valid principal (not zero/sentinel)",
+        "new_address != old_address",
+        "new_address not already registered",
+        "issuer not Revoked"
+      ],
+      "effects": "removes old address mapping, updates issuer record, creates new mapping, emits IssuerAddressRotated"
+    },
+    {
+      "name": "get_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<IssuerRecord, IssuerError>",
+      "access": "public",
+      "auth": "none",
+      "effects": "extends TTL on read"
+    },
+    {
+      "name": "is_active_issuer",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "is_active_address",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_address", "type": "Address" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_issuer_by_address",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "issuer_address", "type": "Address" }
+      ],
+      "output": "Result<IssuerRecord, IssuerError>",
+      "access": "public",
+      "auth": "none",
+      "effects": "extends TTL on read"
+    },
+    {
+      "name": "get_contract_version",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "u32",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "approve_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" },
+        { "name": "new_version", "type": "u32" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if new_version <= current_version"],
+      "effects": "stores AllowedWasm entry, emits UpgradeAllowlisted"
+    },
+    {
+      "name": "revoke_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "removes from allowlist, emits UpgradeRevoked"
+    },
+    {
+      "name": "is_upgrade_allowed",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "upgrade_contract",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if hash not allowlisted", "panics if target_version <= current_version"],
+      "effects": "consumes allowlist entry, updates WASM, advances ContractVersion, emits ContractUpgraded"
+    }
+  ],
+
+  "types": [
+    {
+      "name": "DataKey",
+      "kind": "enum",
+      "variants": [
+        { "name": "Admin", "discriminant": 0, "storage_tier": "instance", "value_type": "Address" },
+        { "name": "Issuer", "discriminant": 1, "storage_tier": "persistent", "value_type": "IssuerRecord", "note": "Maps BytesN<32> to full record" },
+        { "name": "AddressIssuer", "discriminant": 2, "storage_tier": "persistent", "value_type": "BytesN<32>", "note": "Maps Address to issuer_id_hash lookup" },
+        { "name": "AllowedWasm", "discriminant": 3, "storage_tier": "instance", "value_type": "u32" },
+        { "name": "ContractVersion", "discriminant": 4, "storage_tier": "instance", "value_type": "u32" }
+      ]
+    },
+    {
+      "name": "IssuerRecord",
+      "kind": "struct",
+      "fields": [
+        { "name": "issuer_id_hash", "type": "BytesN<32>" },
+        { "name": "issuer_address", "type": "Address" },
+        { "name": "metadata_hash", "type": "BytesN<32>" },
+        { "name": "status", "type": "IssuerStatus" },
+        { "name": "created_at", "type": "u64" },
+        { "name": "updated_at", "type": "u64" }
+      ]
+    },
+    {
+      "name": "IssuerStatus",
+      "kind": "enum",
+      "variants": [
+        { "name": "Active", "discriminant": 0 },
+        { "name": "Suspended", "discriminant": 1 },
+        { "name": "Revoked", "discriminant": 2 }
+      ],
+      "note": "Shared enum from earnproof-shared"
+    }
+  ],
+
+  "errors": [
+    { "name": "IssuerAlreadyRegistered", "code": 200, "category": "domain", "shared": true },
+    { "name": "IssuerNotFound", "code": 201, "category": "domain", "shared": true },
+    { "name": "IssuerAddressAlreadyRegistered", "code": 202, "category": "domain", "shared": true },
+    { "name": "IssuerAddressNotFound", "code": 203, "category": "domain", "shared": true },
+    { "name": "IssuerRevoked", "code": 204, "category": "domain", "shared": true },
+    { "name": "IssuerInactive", "code": 205, "category": "domain", "shared": true, "note": "Defined but not used in current code" },
+    { "name": "InvalidTransition", "code": 206, "category": "domain", "shared": true },
+    { "name": "InvalidAddress", "code": 207, "category": "domain", "shared": true }
+  ],
+
+  "events": [
+    {
+      "name": "UpgradeAllowlisted",
+      "data_type": "{ wasm_hash: BytesN<32>, new_contract_version: u32, approved_by: Address }",
+      "when": "approve_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "UpgradeRevoked",
+      "data_type": "{ wasm_hash: BytesN<32>, revoked_by: Address }",
+      "when": "revoke_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "ContractUpgraded",
+      "data_type": "{ new_wasm_hash: BytesN<32>, old_contract_version: u32, new_contract_version: u32, upgraded_by: Address }",
+      "when": "upgrade_contract() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "IssuerRegistered",
+      "data_type": "{ issuer_id_hash: BytesN<32>, issuer_address: Address, metadata_hash: BytesN<32>, created_at: u64 }",
+      "when": "register_issuer() succeeds",
+      "category": "domain"
+    },
+    {
+      "name": "IssuerMetadataUpdated",
+      "data_type": "{ issuer_id_hash: BytesN<32>, metadata_hash: BytesN<32>, updated_at: u64 }",
+      "when": "update_issuer() succeeds",
+      "category": "domain"
+    },
+    {
+      "name": "IssuerSuspended",
+      "data_type": "{ issuer_id_hash: BytesN<32>, updated_at: u64 }",
+      "when": "suspend_issuer() succeeds",
+      "category": "domain"
+    },
+    {
+      "name": "IssuerReactivated",
+      "data_type": "{ issuer_id_hash: BytesN<32>, updated_at: u64 }",
+      "when": "reactivate_issuer() succeeds",
+      "category": "domain"
+    },
+    {
+      "name": "IssuerRevoked",
+      "data_type": "{ issuer_id_hash: BytesN<32>, updated_at: u64 }",
+      "when": "revoke_issuer() succeeds",
+      "category": "domain"
+    },
+    {
+      "name": "IssuerAddressRotated",
+      "data_type": "{ issuer_id_hash: BytesN<32>, old_address: Address, new_address: Address, updated_at: u64 }",
+      "when": "rotate_issuer_address() succeeds",
+      "category": "domain"
+    }
+  ],
+
+  "storage": [
+    {
+      "key": "DataKey::Admin",
+      "tier": "instance",
+      "value_type": "Address",
+      "access": "get_admin()",
+      "mutated_by": "initialize()",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::Issuer(BytesN<32>)",
+      "tier": "persistent",
+      "value_type": "IssuerRecord",
+      "access": "get_issuer(hash), is_active_issuer(hash)",
+      "mutated_by": "register_issuer(), update_issuer(), suspend_issuer(), reactivate_issuer(), revoke_issuer(), rotate_issuer_address()",
+      "ttl": "extends via extend_issuer_key_ttl()"
+    },
+    {
+      "key": "DataKey::AddressIssuer(Address)",
+      "tier": "persistent",
+      "value_type": "BytesN<32>",
+      "access": "is_active_address(address), get_issuer_by_address(address)",
+      "mutated_by": "register_issuer() adds, rotate_issuer_address() removes old and adds new",
+      "ttl": "extends via extend_address_ttl()"
+    },
+    {
+      "key": "DataKey::AllowedWasm(BytesN<32>)",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "is_upgrade_allowed(hash)",
+      "mutated_by": "approve_upgrade() adds, upgrade_contract() removes",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::ContractVersion",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "get_contract_version()",
+      "mutated_by": "initialize() sets to 1, upgrade_contract() advances",
+      "ttl": "extends via extend_instance_ttl()"
+    }
+  ],
+
+  "ttl_constants": {
+    "TTL_THRESHOLD_LEDGERS": 50_000,
+    "TTL_EXTEND_TO_LEDGERS": 500_000,
+    "source": "earnproof-shared/src/lib.rs"
+  },
+
+  "stability_notes": {
+    "panics_not_typed_errors": [
+      "approve_upgrade: panics on version guard violation"
+    ],
+    "breaking_changes": [
+      "Any change to function signatures",
+      "Any removal of public functions",
+      "Any change to DataKey variants",
+      "Adding fields to IssuerRecord (stored type breaking)",
+      "Any removal/renaming of events"
+    ],
+    "additive_changes": [
+      "New public functions",
+      "New error variants (higher codes)",
+      "New storage keys",
+      "New event fields"
+    ]
+  }
+}

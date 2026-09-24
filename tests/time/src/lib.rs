@@ -170,7 +170,7 @@ mod tests {
                 &1,
                 &(NOW + 1)
             ),
-            Err(Ok(ProofError::InvalidSchemaVersion))
+            Err(Ok(ProofError::ContractPaused))
         );
     }
 
@@ -227,7 +227,7 @@ mod tests {
                 &1,
                 &(NOW + 1),
             ),
-            Err(Ok(ProofError::SchemaVersionNotApproved))
+            Err(Ok(ProofError::UnsupportedSchema))
         );
     }
 
@@ -246,7 +246,7 @@ mod tests {
                 &2,
                 &(NOW + 1),
             ),
-            Err(Ok(ProofError::SchemaVersionNotApproved))
+            Err(Ok(ProofError::UnsupportedSchema))
         );
     }
 
@@ -269,7 +269,7 @@ mod tests {
                 &1,
                 &(NOW + 100),
             ),
-            Err(Ok(ProofError::SchemaVersionNotApproved))
+            Err(Ok(ProofError::UnsupportedSchema))
         );
     }
 

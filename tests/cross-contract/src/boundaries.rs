@@ -340,10 +340,7 @@ fn an_unapproved_schema_is_rejected_after_the_pause_check_but_before_the_issuer_
         deployment.expiry(),
     );
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::SchemaVersionNotApproved)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::UnsupportedSchema));
 }
 
 // ---------------------------------------------------------------------------
@@ -417,10 +414,7 @@ fn an_inactive_issuer_is_rejected_after_both_protocol_config_checks() {
         deployment.expiry(),
     );
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::InvalidSchemaVersion)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::IssuerInactive));
 }
 
 // ---------------------------------------------------------------------------

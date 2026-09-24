@@ -99,7 +99,7 @@ fn an_unapproved_schema_version_reads_as_unapproved_rather_than_failing() {
         &7,
         &FAR_FUTURE,
     );
-    assert_eq!(result, Err(Ok(ProofError::SchemaVersionNotApproved)));
+    assert_eq!(result, Err(Ok(ProofError::UnsupportedSchema)));
 }
 
 #[test]
@@ -157,6 +157,6 @@ fn a_registration_pointed_at_an_empty_protocol_config_is_rejected() {
         &FAR_FUTURE,
     );
 
-    assert_eq!(result, Err(Ok(ProofError::SchemaVersionNotApproved)));
+    assert_eq!(result, Err(Ok(ProofError::UnsupportedSchema)));
     assert!(!proofs.is_valid_proof(&bytes(env, 1)));
 }

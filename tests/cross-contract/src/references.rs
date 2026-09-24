@@ -126,10 +126,7 @@ fn an_uninitialized_protocol_config_fails_closed() {
 
     let rejection = deployment.assert_rejected_and_atomic(&hash(&deployment.env, 0xA5));
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::SchemaVersionNotApproved)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::UnsupportedSchema));
 }
 
 #[test]
@@ -142,10 +139,7 @@ fn an_uninitialized_issuer_registry_fails_closed() {
 
     let rejection = deployment.assert_rejected_and_atomic(&hash(&deployment.env, 0xA6));
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::InvalidSchemaVersion)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::IssuerInactive));
 }
 
 // ---------------------------------------------------------------------------
@@ -173,10 +167,7 @@ fn a_stale_issuer_address_fails_closed_after_rotation() {
         deployment.expiry(),
     );
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::InvalidSchemaVersion)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::IssuerInactive));
 
     // Attributability: the rotation moved the authority rather than breaking
     // registration outright.
@@ -207,10 +198,7 @@ fn the_referenced_protocol_config_gates_registration_not_a_newer_deployment() {
 
     let rejection = deployment.assert_rejected_and_atomic(&hash(&deployment.env, 0xA9));
 
-    assert_eq!(
-        rejection,
-        Rejection::Typed(ProofError::InvalidSchemaVersion)
-    );
+    assert_eq!(rejection, Rejection::Typed(ProofError::ContractPaused));
     assert_eq!(
         deployment.proofs.get_protocol_config(),
         deployment.config.address,

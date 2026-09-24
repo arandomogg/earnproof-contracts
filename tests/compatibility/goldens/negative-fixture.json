@@ -1,0 +1,150 @@
+{
+  "$schema": "earnproof-contract-abi/v1",
+  "contract": "NegativeFixture",
+  "purpose": "INTENTIONALLY BROKEN — proves the gate fails on removal/change",
+  "note": "This fixture contains deliberate breaking changes. The compatibility gate must reject this file when compared against real contract ABIs. Use this to validate the gate's regression detection.",
+  "generated_from": "Manual breaking-change injection for test purposes",
+
+  "functions": [
+    {
+      "name": "initialize",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "admin", "type": "Address" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "breaking_change": "REMOVED parameter: 'version_number' was required in v0.x",
+      "note": "This is intentionally broken to simulate a removed parameter"
+    },
+    {
+      "name": "removed_function_that_no_longer_exists",
+      "inputs": [],
+      "output": "u64",
+      "access": "public",
+      "breaking_change": "REMOVED FUNCTION entirely in v1.x",
+      "note": "This function does not exist in current ABI"
+    }
+  ],
+
+  "types": [
+    {
+      "name": "ExistingStruct",
+      "kind": "struct",
+      "fields": [
+        { "name": "original_field", "type": "u64", "stable_since": "v0.1.0" },
+        { "name": "removed_field_that_no_longer_exists", "type": "Bytes", "breaking_change": "REMOVED in v1.0.0", "migration": "Old stored records will fail to deserialize" }
+      ]
+    },
+    {
+      "name": "ChangedTypeStruct",
+      "kind": "struct",
+      "fields": [
+        { "name": "field_with_changed_type", "type": "String", "breaking_change": "Was U64 in v0.x, changed to String in v1.x", "note": "Stored state incompatible" }
+      ]
+    }
+  ],
+
+  "errors": [
+    { "name": "RemovedError", "code": 1, "breaking_change": "REMOVED error code reused or moved to different range" },
+    { "name": "ChangedErrorCode", "code": 999, "original_code": 50, "breaking_change": "Error code value changed" }
+  ],
+
+  "events": [
+    {
+      "name": "RemovedEventTopic",
+      "data_type": "{ id: u32 }",
+      "breaking_change": "REMOVED event topic entirely",
+      "note": "Indexers depending on this will break"
+    },
+    {
+      "name": "EventWithRemovedField",
+      "data_type": "{ new_field: String }",
+      "breaking_change": "Removed required field 'critical_id: BytesN<32>'",
+      "note": "Consumers cannot safely parse old events"
+    }
+  ],
+
+  "storage": [
+    {
+      "key": "DataKey::RemovedStorageKey",
+      "tier": "persistent",
+      "value_type": "String",
+      "breaking_change": "REMOVED storage key entirely",
+      "note": "Existing stored data cannot be accessed"
+    },
+    {
+      "key": "DataKey::ChangedValueType",
+      "tier": "instance",
+      "value_type": "String",
+      "original_value_type": "u32",
+      "breaking_change": "Storage value type changed",
+      "note": "Old stored values fail to deserialize; no migration path"
+    }
+  ],
+
+  "breaking_changes_summary": [
+    {
+      "category": "ABI",
+      "changes": [
+        "Removed function: removed_function_that_no_longer_exists",
+        "Removed parameter from initialize(): version_number",
+        "Function initialize() now has different signature"
+      ]
+    },
+    {
+      "category": "Storage",
+      "changes": [
+        "Added field to ExistingStruct: removed_field_that_no_longer_exists (breaking for old deserialization)",
+        "Removed DataKey::RemovedStorageKey entirely",
+        "Changed DataKey::ChangedValueType from u32 to String"
+      ]
+    },
+    {
+      "category": "Events",
+      "changes": [
+        "Removed event: RemovedEventTopic",
+        "Removed field from EventWithRemovedField: critical_id"
+      ]
+    },
+    {
+      "category": "Errors",
+      "changes": [
+        "Removed error: RemovedError",
+        "Changed error code: ChangedErrorCode (50 → 999)"
+      ]
+    }
+  ],
+
+  "validation_rules": {
+    "gate_must_detect_all": [
+      "Removed functions",
+      "Removed parameters from existing functions",
+      "Removed struct fields",
+      "Removed storage keys",
+      "Removed event topics",
+      "Removed event fields",
+      "Removed error codes",
+      "Changed value types (storage)",
+      "Changed parameter types (ABI)",
+      "Changed error code values"
+    ],
+    "acceptable_but_requires_note": [
+      "New functions (additive)",
+      "New struct fields (additive)",
+      "New storage keys",
+      "New error codes with higher values"
+    ]
+  },
+
+  "test_expectations": {
+    "when_compared_to_real_protocol_config_abi": "GATE MUST FAIL with breaking-change summary",
+    "when_compared_to_real_issuer_registry_abi": "GATE MUST FAIL with breaking-change summary",
+    "when_compared_to_real_proof_registry_abi": "GATE MUST FAIL with breaking-change summary",
+    "gate_should_report": [
+      "At least 5 breaking changes detected",
+      "Category breakdown: ABI, Storage, Events, Errors",
+      "Confidence: HIGH (all changes are definitive removals/changes, not additive)"
+    ]
+  }
+}

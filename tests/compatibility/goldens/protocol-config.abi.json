@@ -1,0 +1,322 @@
+{
+  "$schema": "earnproof-contract-abi/v1",
+  "contract": "ProtocolConfigContract",
+  "soroban_sdk_version": "27.0.0",
+  "rust_toolchain": "1.98.0",
+  "generated_from": "Part 1 analysis - synthetic values only",
+  "note": "Golden artifact — update with scripts/update-goldens.sh after intentional breaking changes. Requires version bump and migration note in docs/releases/",
+  
+  "functions": [
+    {
+      "name": "initialize",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "admin", "type": "Address" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin.require_auth()",
+      "guards": ["AlreadyInitialized"]
+    },
+    {
+      "name": "get_admin",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<Address, ContractError>",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "set_admin",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "new_admin", "type": "Address" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "bumps ConfigVersion, emits AdminChanged"
+    },
+    {
+      "name": "is_paused",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "pause",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "bumps ConfigVersion, emits Paused"
+    },
+    {
+      "name": "unpause",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "bumps ConfigVersion, emits Unpaused"
+    },
+    {
+      "name": "approve_schema_version",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "version", "type": "u32" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": "version > 0",
+      "effects": "bumps ConfigVersion, emits SchemaApproved"
+    },
+    {
+      "name": "deprecate_schema_version",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "version", "type": "u32" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": "version > 0",
+      "effects": "bumps ConfigVersion, emits SchemaDeprecated"
+    },
+    {
+      "name": "is_schema_version_approved",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "version", "type": "u32" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none",
+      "note": "Returns false if version == 0; extends TTL on read"
+    },
+    {
+      "name": "get_config_version",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "u32",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_contract_version",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "u32",
+      "access": "public",
+      "auth": "none",
+      "note": "Monotonic upgrade counter; separate from ConfigVersion"
+    },
+    {
+      "name": "approve_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" },
+        { "name": "new_version", "type": "u32" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if new_version <= current_version"],
+      "effects": "stores AllowedWasm allowlist entry, emits UpgradeAllowlisted"
+    },
+    {
+      "name": "revoke_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "removes from allowlist, emits UpgradeRevoked"
+    },
+    {
+      "name": "is_upgrade_allowed",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "upgrade_contract",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if hash not allowlisted", "panics if target_version <= current_version"],
+      "effects": "consumes allowlist entry (replay-safe), updates WASM, advances ContractVersion, emits ContractUpgraded"
+    }
+  ],
+
+  "types": [
+    {
+      "name": "DataKey",
+      "kind": "enum",
+      "variants": [
+        { "name": "Admin", "discriminant": 0, "storage_tier": "instance", "value_type": "Address" },
+        { "name": "Paused", "discriminant": 1, "storage_tier": "instance", "value_type": "bool" },
+        { "name": "ConfigVersion", "discriminant": 2, "storage_tier": "instance", "value_type": "u32" },
+        { "name": "SchemaVersion", "discriminant": 3, "storage_tier": "persistent", "value_type": "bool", "note": "Maps u32 version to approval status" },
+        { "name": "AllowedWasm", "discriminant": 4, "storage_tier": "instance", "value_type": "u32", "note": "Maps BytesN<32> to target ContractVersion" },
+        { "name": "ContractVersion", "discriminant": 5, "storage_tier": "instance", "value_type": "u32", "note": "Monotonic counter; prevents downgrade" }
+      ]
+    }
+  ],
+
+  "errors": [
+    { "name": "AlreadyInitialized", "code": 1, "category": "initialization", "shared": true },
+    { "name": "NotInitialized", "code": 2, "category": "initialization", "shared": true },
+    { "name": "InvalidInput", "code": 60, "category": "validation", "shared": true }
+  ],
+
+  "events": [
+    {
+      "name": "Initialized",
+      "data_type": "{ admin: Address }",
+      "when": "initialize() succeeds"
+    },
+    {
+      "name": "AdminChanged",
+      "data_type": "{ new_admin: Address }",
+      "when": "set_admin() succeeds"
+    },
+    {
+      "name": "Paused",
+      "data_type": "{ paused: bool }",
+      "when": "pause() succeeds"
+    },
+    {
+      "name": "Unpaused",
+      "data_type": "{ paused: bool }",
+      "when": "unpause() succeeds"
+    },
+    {
+      "name": "SchemaApproved",
+      "data_type": "{ version: u32 }",
+      "when": "approve_schema_version() succeeds"
+    },
+    {
+      "name": "SchemaDeprecated",
+      "data_type": "{ version: u32 }",
+      "when": "deprecate_schema_version() succeeds"
+    },
+    {
+      "name": "UpgradeAllowlisted",
+      "data_type": "{ wasm_hash: BytesN<32>, new_contract_version: u32, approved_by: Address }",
+      "when": "approve_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "UpgradeRevoked",
+      "data_type": "{ wasm_hash: BytesN<32>, revoked_by: Address }",
+      "when": "revoke_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "ContractUpgraded",
+      "data_type": "{ new_wasm_hash: BytesN<32>, old_contract_version: u32, new_contract_version: u32, upgraded_by: Address }",
+      "when": "upgrade_contract() succeeds",
+      "category": "upgrade"
+    }
+  ],
+
+  "storage": [
+    {
+      "key": "DataKey::Admin",
+      "tier": "instance",
+      "value_type": "Address",
+      "access": "get_admin()",
+      "mutated_by": "initialize(), set_admin()",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::Paused",
+      "tier": "instance",
+      "value_type": "bool",
+      "access": "is_paused()",
+      "mutated_by": "pause(), unpause()",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::ConfigVersion",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "get_config_version()",
+      "mutated_by": "Any mutation via bump_config_version()",
+      "ttl": "extends via extend_instance_ttl()",
+      "note": "Incremented on every mutation; overflow panics"
+    },
+    {
+      "key": "DataKey::SchemaVersion(u32)",
+      "tier": "persistent",
+      "value_type": "bool",
+      "access": "is_schema_version_approved(version)",
+      "mutated_by": "approve_schema_version(), deprecate_schema_version()",
+      "ttl": "extends via extend_schema_ttl(version, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS)"
+    },
+    {
+      "key": "DataKey::AllowedWasm(BytesN<32>)",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "is_upgrade_allowed(hash)",
+      "mutated_by": "approve_upgrade() adds, upgrade_contract() removes",
+      "ttl": "extends via extend_instance_ttl()",
+      "note": "Maps WASM hash to target ContractVersion; consumed on upgrade"
+    },
+    {
+      "key": "DataKey::ContractVersion",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "get_contract_version()",
+      "mutated_by": "initialize() sets to 1, upgrade_contract() advances",
+      "ttl": "extends via extend_instance_ttl()",
+      "note": "Monotonic; prevents downgrade; separate from ConfigVersion"
+    }
+  ],
+
+  "ttl_constants": {
+    "TTL_THRESHOLD_LEDGERS": 50_000,
+    "TTL_EXTEND_TO_LEDGERS": 500_000,
+    "source": "earnproof-shared/src/lib.rs"
+  },
+
+  "stability_notes": {
+    "panics_not_typed_errors": [
+      "approve_upgrade: panics on version guard violation (unrecoverable state)"
+    ],
+    "breaking_changes": [
+      "Any change to function signatures (name, params, order, return type)",
+      "Any removal of public functions",
+      "Any change to DataKey enum variants",
+      "Any change to stored value types",
+      "Any removal or renaming of events"
+    ],
+    "additive_changes": [
+      "New public functions",
+      "New error variants (with higher codes)",
+      "New storage keys",
+      "New event fields (backward-compatible)"
+    ]
+  }
+}

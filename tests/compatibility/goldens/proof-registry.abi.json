@@ -1,0 +1,365 @@
+{
+  "$schema": "earnproof-contract-abi/v1",
+  "contract": "ProofRegistryContract",
+  "soroban_sdk_version": "27.0.0",
+  "rust_toolchain": "1.98.0",
+  "generated_from": "Part 1 analysis - synthetic values only",
+  "note": "Golden artifact — update with scripts/update-goldens.sh after intentional breaking changes. Requires version bump and migration note in docs/releases/",
+
+  "functions": [
+    {
+      "name": "initialize",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "admin", "type": "Address" },
+        { "name": "issuer_registry", "type": "Address" },
+        { "name": "protocol_config", "type": "Address" }
+      ],
+      "output": "Result<(), ContractError>",
+      "access": "public",
+      "auth": "admin.require_auth()",
+      "guards": ["AlreadyInitialized"],
+      "validation": [
+        "admin is valid principal",
+        "issuer_registry is valid principal",
+        "protocol_config is valid principal",
+        "no self-references (current_contract_address not in deps)",
+        "issuer_registry != protocol_config"
+      ]
+    },
+    {
+      "name": "register_proof",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" },
+        { "name": "commitment_hash", "type": "BytesN<32>" },
+        { "name": "issuer_address", "type": "Address" },
+        { "name": "schema_version", "type": "u32" },
+        { "name": "expires_at", "type": "u64" }
+      ],
+      "output": "Result<(), ProofError>",
+      "access": "public",
+      "auth": "issuer_address.require_auth()",
+      "validation": [
+        "issuer_address is valid principal",
+        "schema_version > 0 (InvalidSchemaVersion)",
+        "expires_at > now (ProofExpired)",
+        "protocol not paused (InvalidSchemaVersion)",
+        "schema_version approved (SchemaVersionNotApproved)",
+        "issuer_address is active (InvalidSchemaVersion)",
+        "issuer_address not self, not protocol_config, not issuer_registry"
+      ],
+      "effects": "creates ProofRecord with status=Active, no event emitted (storage only)"
+    },
+    {
+      "name": "revoke_proof",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), ProofError>",
+      "access": "public",
+      "auth": "issuer_address (from proof record)",
+      "validation": "proof not already revoked (ProofAlreadyRevoked)",
+      "effects": "sets status to Revoked, records revoked_at timestamp, no event emitted"
+    },
+    {
+      "name": "admin_revoke_proof",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<(), ProofError>",
+      "access": "public",
+      "auth": "admin_only",
+      "validation": "proof not already revoked (ProofAlreadyRevoked)",
+      "effects": "sets status to Revoked, records revoked_at timestamp, no event emitted"
+    },
+    {
+      "name": "get_proof",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "Result<ProofRecord, ProofError>",
+      "access": "public",
+      "auth": "none",
+      "effects": "extends TTL on read"
+    },
+    {
+      "name": "is_valid_proof",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none",
+      "note": "Returns true only if status == Active AND expires_at > now"
+    },
+    {
+      "name": "is_revoked",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "proof_id_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_admin",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<Address, ContractError>",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_issuer_registry",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<Address, ContractError>",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_protocol_config",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "Result<Address, ContractError>",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "get_contract_version",
+      "inputs": [
+        { "name": "env", "type": "Env" }
+      ],
+      "output": "u32",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "approve_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" },
+        { "name": "new_version", "type": "u32" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if new_version <= current_version"],
+      "effects": "stores AllowedWasm entry, emits UpgradeAllowlisted"
+    },
+    {
+      "name": "revoke_upgrade",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "effects": "removes from allowlist, emits UpgradeRevoked"
+    },
+    {
+      "name": "is_upgrade_allowed",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "bool",
+      "access": "public",
+      "auth": "none"
+    },
+    {
+      "name": "upgrade_contract",
+      "inputs": [
+        { "name": "env", "type": "Env" },
+        { "name": "wasm_hash", "type": "BytesN<32>" }
+      ],
+      "output": "void",
+      "access": "public",
+      "auth": "admin_only",
+      "guards": ["panics if hash not allowlisted", "panics if target_version <= current_version"],
+      "effects": "consumes allowlist entry, updates WASM, advances ContractVersion, emits ContractUpgraded"
+    }
+  ],
+
+  "types": [
+    {
+      "name": "DataKey",
+      "kind": "enum",
+      "variants": [
+        { "name": "Admin", "discriminant": 0, "storage_tier": "instance", "value_type": "Address" },
+        { "name": "IssuerRegistry", "discriminant": 1, "storage_tier": "instance", "value_type": "Address", "note": "Dependency reference" },
+        { "name": "ProtocolConfig", "discriminant": 2, "storage_tier": "instance", "value_type": "Address", "note": "Dependency reference" },
+        { "name": "Proof", "discriminant": 3, "storage_tier": "persistent", "value_type": "ProofRecord", "note": "Maps BytesN<32> to full record" },
+        { "name": "AllowedWasm", "discriminant": 4, "storage_tier": "instance", "value_type": "u32" },
+        { "name": "ContractVersion", "discriminant": 5, "storage_tier": "instance", "value_type": "u32" }
+      ]
+    },
+    {
+      "name": "ProofRecord",
+      "kind": "struct",
+      "fields": [
+        { "name": "proof_id_hash", "type": "BytesN<32>" },
+        { "name": "commitment_hash", "type": "BytesN<32>" },
+        { "name": "issuer_address", "type": "Address" },
+        { "name": "status", "type": "ProofStatus" },
+        { "name": "schema_version", "type": "u32" },
+        { "name": "expires_at", "type": "u64" },
+        { "name": "created_at", "type": "u64" },
+        { "name": "revoked_at", "type": "u64" }
+      ]
+    },
+    {
+      "name": "ProofStatus",
+      "kind": "enum",
+      "variants": [
+        { "name": "Active", "discriminant": 0 },
+        { "name": "Revoked", "discriminant": 1 }
+      ],
+      "note": "Shared enum from earnproof-shared"
+    }
+  ],
+
+  "errors": [
+    { "name": "ProofAlreadyRegistered", "code": 300, "category": "domain", "shared": true },
+    { "name": "ProofNotFound", "code": 301, "category": "domain", "shared": true },
+    { "name": "ProofAlreadyRevoked", "code": 302, "category": "domain", "shared": true },
+    { "name": "ProofExpired", "code": 303, "category": "domain", "shared": true },
+    { "name": "InvalidSchemaVersion", "code": 304, "category": "domain", "shared": true, "note": "Overloaded: schema_version == 0, protocol paused, issuer inactive" },
+    { "name": "SchemaVersionNotApproved", "code": 305, "category": "domain", "shared": true },
+    { "name": "InvalidAddress", "code": 306, "category": "domain", "shared": true }
+  ],
+
+  "events": [
+    {
+      "name": "UpgradeAllowlisted",
+      "data_type": "{ wasm_hash: BytesN<32>, new_contract_version: u32, approved_by: Address }",
+      "when": "approve_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "UpgradeRevoked",
+      "data_type": "{ wasm_hash: BytesN<32>, revoked_by: Address }",
+      "when": "revoke_upgrade() succeeds",
+      "category": "upgrade"
+    },
+    {
+      "name": "ContractUpgraded",
+      "data_type": "{ new_wasm_hash: BytesN<32>, old_contract_version: u32, new_contract_version: u32, upgraded_by: Address }",
+      "when": "upgrade_contract() succeeds",
+      "category": "upgrade"
+    }
+  ],
+
+  "storage": [
+    {
+      "key": "DataKey::Admin",
+      "tier": "instance",
+      "value_type": "Address",
+      "access": "get_admin()",
+      "mutated_by": "initialize()",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::IssuerRegistry",
+      "tier": "instance",
+      "value_type": "Address",
+      "access": "get_issuer_registry()",
+      "mutated_by": "initialize()",
+      "ttl": "extends via extend_instance_ttl()",
+      "note": "Dependency reference for cross-contract calls"
+    },
+    {
+      "key": "DataKey::ProtocolConfig",
+      "tier": "instance",
+      "value_type": "Address",
+      "access": "get_protocol_config()",
+      "mutated_by": "initialize()",
+      "ttl": "extends via extend_instance_ttl()",
+      "note": "Dependency reference for cross-contract calls"
+    },
+    {
+      "key": "DataKey::Proof(BytesN<32>)",
+      "tier": "persistent",
+      "value_type": "ProofRecord",
+      "access": "get_proof(hash), is_valid_proof(hash), is_revoked(hash)",
+      "mutated_by": "register_proof(), revoke_proof(), admin_revoke_proof()",
+      "ttl": "extends via extend_proof_key_ttl()"
+    },
+    {
+      "key": "DataKey::AllowedWasm(BytesN<32>)",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "is_upgrade_allowed(hash)",
+      "mutated_by": "approve_upgrade() adds, upgrade_contract() removes",
+      "ttl": "extends via extend_instance_ttl()"
+    },
+    {
+      "key": "DataKey::ContractVersion",
+      "tier": "instance",
+      "value_type": "u32",
+      "access": "get_contract_version()",
+      "mutated_by": "initialize() sets to 1, upgrade_contract() advances",
+      "ttl": "extends via extend_instance_ttl()"
+    }
+  ],
+
+  "cross_contract_interfaces": [
+    {
+      "trait_name": "ProtocolConfigInterface",
+      "contract": "protocol_config",
+      "methods": [
+        { "name": "is_paused", "inputs": ["env: Env"], "output": "bool" },
+        { "name": "is_schema_version_approved", "inputs": ["env: Env", "version: u32"], "output": "bool" }
+      ]
+    },
+    {
+      "trait_name": "IssuerRegistryInterface",
+      "contract": "issuer_registry",
+      "methods": [
+        { "name": "is_active_address", "inputs": ["env: Env", "issuer_address: Address"], "output": "bool" }
+      ]
+    }
+  ],
+
+  "ttl_constants": {
+    "TTL_THRESHOLD_LEDGERS": 50_000,
+    "TTL_EXTEND_TO_LEDGERS": 500_000,
+    "source": "earnproof-shared/src/lib.rs"
+  },
+
+  "stability_notes": {
+    "panics_not_typed_errors": [
+      "approve_upgrade: panics on version guard violation"
+    ],
+    "events_not_emitted": [
+      "register_proof: creates record but no event (storage only)",
+      "revoke_proof: updates record but no event (storage only)",
+      "admin_revoke_proof: updates record but no event (storage only)",
+      "Note: This is a gap compared to issuer-registry and may be addressed in future versions"
+    ],
+    "breaking_changes": [
+      "Any change to function signatures",
+      "Any removal of public functions",
+      "Any change to dependency parameter types or order in initialize()",
+      "Any change to DataKey variants",
+      "Adding fields to ProofRecord (stored type breaking)",
+      "Any removal/renaming of cross-contract interface methods"
+    ],
+    "additive_changes": [
+      "New public functions",
+      "New error variants (higher codes)",
+      "New storage keys",
+      "New event fields"
+    ]
+  }
+}

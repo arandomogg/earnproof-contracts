@@ -1,0 +1,350 @@
+name: Contract Compatibility Gate
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'contracts/**/*.rs'
+      - 'packages/shared/**/*.rs'
+      - 'tests/compatibility/**'
+      - 'docs/GOLDEN_TEST_POLICY.md'
+
+  pull_request:
+    paths:
+      - 'contracts/**/*.rs'
+      - 'packages/shared/**/*.rs'
+      - 'tests/compatibility/**'
+      - 'docs/GOLDEN_TEST_POLICY.md'
+
+jobs:
+  compatibility-gate:
+    name: ABI & Storage Golden Gate
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust (pinned toolchain)
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Format check
+        run: cargo fmt --all -- --check
+      
+      - name: Clippy check
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      
+      - name: Build contracts (wasm32)
+        run: cargo build --target wasm32-unknown-unknown --release --quiet
+      
+      - name: Run unit tests
+        run: cargo test --workspace --lib
+      
+      - name: Run compatibility golden tests
+        run: cargo test --test compatibility -- --nocapture --test-threads=1
+        continue-on-error: false
+      
+      - name: Validate golden artifacts exist
+        run: |
+          echo "Validating golden artifact files..."
+          
+          CONTRACTS=("protocol-config" "issuer-registry" "proof-registry")
+          MISSING=0
+          
+          for contract in "${CONTRACTS[@]}"; do
+            golden="tests/compatibility/goldens/${contract}.abi.json"
+            if [ ! -f "$golden" ]; then
+              echo "❌ Missing golden: $golden"
+              MISSING=1
+            else
+              echo "✓ Found golden: $golden"
+              # Verify it's valid JSON
+              if ! jq empty "$golden" 2>/dev/null; then
+                echo "❌ Invalid JSON in $golden"
+                MISSING=1
+              fi
+            fi
+          done
+          
+          if [ ! -f "tests/compatibility/goldens/negative-fixture.json" ]; then
+            echo "❌ Missing negative fixture"
+            MISSING=1
+          else
+            echo "✓ Found negative fixture"
+          fi
+          
+          if [ "$MISSING" -eq 1 ]; then
+            exit 1
+          fi
+          echo "✅ All golden artifacts present and valid"
+      
+      - name: Validate golden content
+        run: |
+          echo "Validating golden content structure..."
+          
+          # Verify each golden has required schema fields
+          for golden in tests/compatibility/goldens/*.abi.json; do
+            name=$(basename "$golden" .json)
+            if [[ "$name" == "negative-fixture" ]]; then
+              continue  # Skip negative fixture for this check
+            fi
+            
+            # Check required fields
+            if ! jq -e '.contract' "$golden" > /dev/null; then
+              echo "❌ $name missing 'contract' field"
+              exit 1
+            fi
+            if ! jq -e '.functions' "$golden" > /dev/null; then
+              echo "❌ $name missing 'functions' array"
+              exit 1
+            fi
+            if ! jq -e '.types' "$golden" > /dev/null; then
+              echo "❌ $name missing 'types' array"
+              exit 1
+            fi
+            if ! jq -e '.errors' "$golden" > /dev/null; then
+              echo "❌ $name missing 'errors' array"
+              exit 1
+            fi
+            if ! jq -e '.storage' "$golden" > /dev/null; then
+              echo "❌ $name missing 'storage' array"
+              exit 1
+            fi
+            
+            # Verify soroban-sdk version
+            VERSION=$(jq -r '.soroban_sdk_version' "$golden")
+            if [ "$VERSION" != "27.0.0" ]; then
+              echo "⚠️  Warning: $name has soroban_sdk_version $VERSION (expected 27.0.0)"
+            fi
+            
+            echo "✓ $name has all required fields"
+          done
+          
+          echo "✅ All goldens have valid structure"
+      
+      - name: Verify no production data in goldens
+        run: |
+          echo "Checking for production identifiers in goldens..."
+          
+          FOUND=0
+          
+          # Patterns that indicate production data (stricter check)
+          for pattern in "GDQOE23" "prod_secret" "mainnet_key" "SBHM"; do
+            if grep -r "$pattern" tests/compatibility/goldens/ 2>/dev/null; then
+              echo "❌ Found production pattern: $pattern"
+              FOUND=1
+            fi
+          done
+          
+          if [ "$FOUND" -eq 1 ]; then
+            echo "❌ Production data detected in golden files"
+            exit 1
+          fi
+          
+          echo "✅ No production identifiers detected"
+      
+      - name: Function signature consistency check
+        run: |
+          echo "Checking function signature consistency..."
+          
+          # Verify no duplicate function names in each golden
+          for golden in tests/compatibility/goldens/*.abi.json; do
+            name=$(basename "$golden" .json)
+            if [[ "$name" == "negative-fixture" ]]; then
+              continue
+            fi
+            
+            DUPLICATES=$(jq -r '.functions[].name' "$golden" | sort | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate function names in $name: $DUPLICATES"
+              exit 1
+            fi
+            
+            COUNT=$(jq '.functions | length' "$golden")
+            echo "✓ $name: $COUNT functions (no duplicates)"
+          done
+          
+          echo "✅ All function signatures are unique"
+      
+      - name: Error code consistency check
+        run: |
+          echo "Checking error code consistency..."
+          
+          # Verify no duplicate error codes per contract
+          for golden in tests/compatibility/goldens/*.abi.json; do
+            name=$(basename "$golden" .json)
+            if [[ "$name" == "negative-fixture" ]]; then
+              continue
+            fi
+            
+            DUPLICATES=$(jq -r '.errors[].code' "$golden" | sort | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate error codes in $name: $DUPLICATES"
+              exit 1
+            fi
+            
+            # Verify codes are in expected ranges
+            case "$name" in
+              "protocol-config")
+                if jq -e '.errors[] | select(.code < 1 or .code >= 100)' "$golden" > /dev/null; then
+                  echo "❌ $name error codes outside range 1-99"
+                  exit 1
+                fi
+                ;;
+              "issuer-registry")
+                if jq -e '.errors[] | select(.code < 200 or .code >= 300)' "$golden" > /dev/null; then
+                  echo "❌ $name error codes outside range 200-299"
+                  exit 1
+                fi
+                ;;
+              "proof-registry")
+                if jq -e '.errors[] | select(.code < 300 or .code >= 400)' "$golden" > /dev/null; then
+                  echo "❌ $name error codes outside range 300-399"
+                  exit 1
+                fi
+                ;;
+            esac
+            
+            COUNT=$(jq '.errors | length' "$golden")
+            echo "✓ $name: $COUNT errors in correct range (no duplicates)"
+          done
+          
+          echo "✅ All error codes are unique and in correct ranges"
+      
+      - name: Storage key consistency check
+        run: |
+          echo "Checking storage key consistency..."
+          
+          for golden in tests/compatibility/goldens/*.abi.json; do
+            name=$(basename "$golden" .json)
+            if [[ "$name" == "negative-fixture" ]]; then
+              continue
+            fi
+            
+            # Verify no duplicate storage keys
+            DUPLICATES=$(jq -r '.storage[].key' "$golden" | sort | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate storage keys in $name: $DUPLICATES"
+              exit 1
+            fi
+            
+            # Verify all storage tiers are valid
+            INVALID=$(jq -r '.storage[] | select(.tier != "persistent" and .tier != "instance" and .tier != "temporary") | .tier' "$golden")
+            if [ -n "$INVALID" ]; then
+              echo "❌ Invalid storage tier in $name: $INVALID"
+              exit 1
+            fi
+            
+            COUNT=$(jq '.storage | length' "$golden")
+            echo "✓ $name: $COUNT storage keys (valid tiers, no duplicates)"
+          done
+          
+          echo "✅ All storage keys are valid and unique"
+      
+      - name: Negative fixture validation
+        run: |
+          echo "Validating negative fixture..."
+          
+          FIXTURE="tests/compatibility/goldens/negative-fixture.json"
+          
+          # Verify fixture has removed items
+          HAS_REMOVED_FUNC=$(jq '.functions[] | select(.name | contains("removed")) | .name' "$FIXTURE")
+          if [ -z "$HAS_REMOVED_FUNC" ]; then
+            echo "❌ Negative fixture missing removed function"
+            exit 1
+          fi
+          echo "✓ Fixture has removed function: $HAS_REMOVED_FUNC"
+          
+          HAS_REMOVED_KEY=$(jq '.storage[] | select(.key | contains("Removed")) | .key' "$FIXTURE")
+          if [ -z "$HAS_REMOVED_KEY" ]; then
+            echo "❌ Negative fixture missing removed storage key"
+            exit 1
+          fi
+          echo "✓ Fixture has removed storage key: $HAS_REMOVED_KEY"
+          
+          echo "✅ Negative fixture has intentional breakage"
+      
+      - name: Documentation check
+        run: |
+          echo "Checking documentation..."
+          
+          # Verify GOLDEN_TEST_POLICY.md exists
+          if [ ! -f "docs/GOLDEN_TEST_POLICY.md" ]; then
+            echo "❌ docs/GOLDEN_TEST_POLICY.md not found"
+            exit 1
+          fi
+          echo "✓ Found docs/GOLDEN_TEST_POLICY.md"
+          
+          # Verify README in compatibility directory
+          if [ ! -f "tests/compatibility/README.md" ]; then
+            echo "❌ tests/compatibility/README.md not found"
+            exit 1
+          fi
+          echo "✓ Found tests/compatibility/README.md"
+          
+          # Verify update script exists
+          if [ ! -f "scripts/update-goldens.sh" ]; then
+            echo "❌ scripts/update-goldens.sh not found"
+            exit 1
+          fi
+          echo "✓ Found scripts/update-goldens.sh"
+          
+          echo "✅ All documentation present"
+      
+      - name: Summary report
+        if: always()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "Contract Compatibility Gate - Summary"
+          echo "=========================================="
+          echo ""
+          echo "✅ Golden Artifacts:"
+          echo "   - protocol-config.abi.json"
+          echo "   - issuer-registry.abi.json"
+          echo "   - proof-registry.abi.json"
+          echo "   - negative-fixture.json"
+          echo ""
+          echo "✅ Tests:"
+          echo "   - Compatibility gate tests (50+)"
+          echo "   - Golden file validation"
+          echo "   - Breaking change detection"
+          echo "   - Production data checks"
+          echo ""
+          echo "✅ Documentation:"
+          echo "   - GOLDEN_TEST_POLICY.md (comprehensive policy)"
+          echo "   - tests/compatibility/README.md (quick reference)"
+          echo "   - scripts/update-goldens.sh (maintenance script)"
+          echo ""
+          echo "=========================================="
+          echo ""
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ COMPATIBILITY GATE PASSED"
+            exit 0
+          else
+            echo "❌ COMPATIBILITY GATE FAILED"
+            exit 1
+          fi
+
+  test-negative-fixture:
+    name: Negative Fixture Proof
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Run negative fixture validation test
+        run: |
+          cargo test --test compatibility test_negative_fixture -- --nocapture
+        continue-on-error: false

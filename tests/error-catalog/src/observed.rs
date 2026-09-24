@@ -258,6 +258,51 @@ fn every_returned_code_is_produced_by_a_real_failure_path() {
         )),
     );
 
+    // New precondition codes (307-309): drive a real failure path for each.
+    // 307: ContractPaused — pause the protocol then attempt registration.
+    let deployment2 = deployment();
+    let env2 = &deployment2.env;
+    deployment2.config.pause();
+    observed.record(
+        "proof-registry contract paused",
+        code(deployment2.proofs.try_register_proof(
+            &bytes32(env2, 40),
+            &bytes32(env2, 41),
+            &deployment2.issuer,
+            &1,
+            &FAR_FUTURE,
+        )),
+    );
+
+    // 308: IssuerInactive — suspend the issuer then attempt registration.
+    let deployment3 = deployment();
+    let env3 = &deployment3.env;
+    deployment3.issuers.suspend_issuer(&bytes32(env3, 1));
+    observed.record(
+        "proof-registry issuer inactive",
+        code(deployment3.proofs.try_register_proof(
+            &bytes32(env3, 50),
+            &bytes32(env3, 51),
+            &deployment3.issuer,
+            &1,
+            &FAR_FUTURE,
+        )),
+    );
+
+    // 309: UnsupportedSchema — use an unapproved schema version on a live contract.
+    let deployment4 = deployment();
+    let env4 = &deployment4.env;
+    observed.record(
+        "proof-registry unsupported schema",
+        code(deployment4.proofs.try_register_proof(
+            &bytes32(env4, 60),
+            &bytes32(env4, 61),
+            &deployment4.issuer,
+            &7,
+            &FAR_FUTURE,
+        )),
+    );
+
     // Every catalogued `Returned` code must appear at least once above.
     for entry in ERROR_CATALOG {
         if entry.status == Status::Returned {
@@ -283,10 +328,10 @@ fn every_returned_code_is_produced_by_a_real_failure_path() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_paused_protocol_is_reported_as_invalid_schema_version() {
-    // The overloaded code documented in the catalog. Asserting it means the
-    // documentation stays honest, and means a future release that introduces a
-    // distinct pause code has to update the catalog in the same change.
+fn a_paused_protocol_is_reported_as_contract_paused() {
+    // Distinct code introduced by issue #136. Asserting it here means the
+    // documentation stays honest, and a future change that alters the pause
+    // code has to update the catalog in the same change.
     let deployment = deployment();
     deployment.config.pause();
 
@@ -298,15 +343,16 @@ fn a_paused_protocol_is_reported_as_invalid_schema_version() {
         &FAR_FUTURE,
     );
 
-    assert_eq!(result, Err(Ok(ProofError::InvalidSchemaVersion)));
+    assert_eq!(result, Err(Ok(ProofError::ContractPaused)));
     assert_ne!(
-        ProofError::InvalidSchemaVersion as u32,
-        ContractError::ProtocolPaused as u32
+        ProofError::ContractPaused as u32,
+        ContractError::ProtocolPaused as u32,
+        "proof-registry ContractPaused must not collide with the common ProtocolPaused code"
     );
 }
 
 #[test]
-fn a_suspended_issuer_is_reported_as_invalid_schema_version() {
+fn a_suspended_issuer_is_reported_as_issuer_inactive() {
     let deployment = deployment();
     let env = &deployment.env;
     let suspended = Address::generate(env);
@@ -323,10 +369,11 @@ fn a_suspended_issuer_is_reported_as_invalid_schema_version() {
         &FAR_FUTURE,
     );
 
-    assert_eq!(result, Err(Ok(ProofError::InvalidSchemaVersion)));
+    assert_eq!(result, Err(Ok(ProofError::IssuerInactive)));
     assert_ne!(
-        ProofError::InvalidSchemaVersion as u32,
-        IssuerError::IssuerInactive as u32
+        ProofError::IssuerInactive as u32,
+        IssuerError::IssuerInactive as u32,
+        "proof-registry IssuerInactive must not collide with issuer-registry IssuerInactive"
     );
 }
 
@@ -351,7 +398,7 @@ fn an_uninitialized_proof_registry_reports_proof_not_found_and_writes_nothing() 
 }
 
 #[test]
-fn a_registry_pointed_at_an_empty_config_reports_schema_version_not_approved() {
+fn a_registry_pointed_at_an_empty_config_reports_unsupported_schema() {
     let deployment = deployment();
     let env = &deployment.env;
     let empty_config = env.register(ProtocolConfigContract, ());
@@ -367,7 +414,7 @@ fn a_registry_pointed_at_an_empty_config_reports_schema_version_not_approved() {
         &FAR_FUTURE,
     );
 
-    assert_eq!(result, Err(Ok(ProofError::SchemaVersionNotApproved)));
+    assert_eq!(result, Err(Ok(ProofError::UnsupportedSchema)));
 }
 
 #[test]
