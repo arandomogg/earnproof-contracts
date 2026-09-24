@@ -99,12 +99,13 @@ fn per_record_namespaces_hold_one_entry_per_record() {
     let deployment = exercised_deployment();
     let env = &deployment.env;
 
-    // Three issuers, each with a record and a reverse-index entry. The rotated
-    // address replaces the old index entry rather than adding to it, so the
-    // count is six and not seven.
+    // Four issuers, each with a record and a reverse-index entry. The rotated
+    // address replaces the old index entry rather than adding to it, so those
+    // two counts are eight and not nine. The issuer left suspended adds one
+    // ReactivatableAt entry, for nine persistent keys in total.
     assert_eq!(
         keys_in(env, &deployment.issuers_id, StorageClass::Persistent).len(),
-        6
+        9
     );
 
     // Two proofs, one of them revoked in place.

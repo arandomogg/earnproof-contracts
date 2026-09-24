@@ -157,7 +157,7 @@ pub struct ErrorSpec {
 }
 
 /// Every published error, ordered by code.
-pub const ERROR_CATALOG: [ErrorSpec; 21] = [
+pub const ERROR_CATALOG: [ErrorSpec; 25] = [
     ErrorSpec {
         code: 1,
         name: "AlreadyInitialized",
@@ -241,6 +241,18 @@ pub const ERROR_CATALOG: [ErrorSpec; 21] = [
         remediation: "Correct the argument. Retrying the identical request will fail identically.",
         http_status: 400,
         client_message: "Invalid input provided",
+    },
+    ErrorSpec {
+        code: 62,
+        name: "IncompatibleInterfaceVersion",
+        enum_name: "ContractError",
+        domain: Domain::Common,
+        status: Status::Returned,
+        cause: "A cross-contract dependency reported an interface version outside the range the consumer accepts, during initialization or a governed dependency replacement.",
+        retry: Retry::AfterCallerChange,
+        remediation: "Bind a dependency whose interface version is compatible: same major and at least the minor and patch the consumer requires. Read the accepted version from the consumer before retrying.",
+        http_status: 400,
+        client_message: "Incompatible dependency version",
     },
     ErrorSpec {
         code: 80,
@@ -337,6 +349,42 @@ pub const ERROR_CATALOG: [ErrorSpec; 21] = [
         remediation: "Read the current status and choose a permitted transition.",
         http_status: 400,
         client_message: "Invalid status transition",
+    },
+    ErrorSpec {
+        code: 208,
+        name: "IssuerCapacityExceeded",
+        enum_name: "IssuerError",
+        domain: Domain::IssuerRegistry,
+        status: Status::Returned,
+        cause: "register_issuer or reactivate_issuer would push the active-issuer count above the governed maximum capacity.",
+        retry: Retry::AfterOperatorAction,
+        remediation: "Wait for an issuer to be suspended or revoked, or have an admin raise the maximum active-issuer capacity. Read get_active_issuer_count and get_max_active_issuers to see the headroom.",
+        http_status: 409,
+        client_message: "Issuer capacity reached",
+    },
+    ErrorSpec {
+        code: 209,
+        name: "MaxBelowActiveUsage",
+        enum_name: "IssuerError",
+        domain: Domain::IssuerRegistry,
+        status: Status::Returned,
+        cause: "set_max_active_issuers was asked to set a limit below the current active-issuer count without the explicit below-usage override.",
+        retry: Retry::AfterCallerChange,
+        remediation: "Pass a limit at or above the current active count, or set the override flag to ratchet the ceiling down deliberately. Retrying the identical request will fail identically.",
+        http_status: 400,
+        client_message: "Capacity limit below current usage",
+    },
+    ErrorSpec {
+        code: 210,
+        name: "ReactivationCooldownActive",
+        enum_name: "IssuerError",
+        domain: Domain::IssuerRegistry,
+        status: Status::Returned,
+        cause: "reactivate_issuer was called before the suspended issuer's reactivation cooldown had elapsed.",
+        retry: Retry::AfterCallerChange,
+        remediation: "Wait until the ledger time returned by get_earliest_reactivation before retrying. The deadline is fixed at suspension time and does not move.",
+        http_status: 400,
+        client_message: "Reactivation cooldown has not elapsed",
     },
     ErrorSpec {
         code: 300,

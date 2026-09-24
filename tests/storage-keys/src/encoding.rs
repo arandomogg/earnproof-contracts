@@ -11,9 +11,10 @@
 //! there first.
 
 use super::support::{
-    address_issuer_key, admin_key, bytes32, config_version_key, contract_version_key, deployment,
-    encoded, encoded_keys_in, issuer_key, issuer_registry_key, paused_key, proof_key,
-    protocol_config_key, schema_version_key,
+    active_issuer_count_key, address_issuer_key, admin_key, bytes32, config_version_key,
+    contract_version_key, deployment, encoded, encoded_keys_in, issuer_epoch_key, issuer_key,
+    issuer_registry_key, max_active_issuers_key, paused_key, proof_key, protocol_config_key,
+    reactivation_cooldown_key, schema_version_key,
 };
 use earnproof_shared::StorageClass;
 use soroban_sdk::testutils::Address as _;
@@ -55,6 +56,10 @@ fn reconstructed_keys_match_the_keys_the_contracts_write() {
         sorted(std::vec![
             encoded(env, admin_key()),
             encoded(env, contract_version_key(env)),
+            encoded(env, active_issuer_count_key(env)),
+            encoded(env, issuer_epoch_key(env)),
+            encoded(env, max_active_issuers_key(env)),
+            encoded(env, reactivation_cooldown_key(env)),
         ]),
         "issuer-registry instance keys"
     );
@@ -284,7 +289,7 @@ fn identical_namespaces_in_different_contracts_address_different_entries() {
     // another: the issuer registry still holds only its fixed instance keys.
     assert_eq!(
         encoded_keys_in(env, &deployment.issuers_id, StorageClass::Instance).len(),
-        2
+        6
     );
 }
 

@@ -1,15 +1,19 @@
 # scenario: active
-# revision: 4
-# reason: contract version keys are now persisted in initialized ledgers
-# body-digest: 936498328c12fd81ca7c4bcbd0aa0214c0e94472fca750d0033ccf6f6aeb3dfc
+# revision: 5
+# reason: issuer-registry init now stores ActiveIssuerCount MaxActiveIssuers ReactivationCooldown and IssuerEpoch keys
+# body-digest: e91c62c075768b38a230568b7be77dc50e50470ebeff747d4a8b2969b64f0d73
 
 [ledger]
 sequence = 1000
 timestamp = 1000
 
 [storage]
+issuer-registry instance [sym:ActiveIssuerCount] = u32:1
 issuer-registry instance [sym:Admin] = addr:admin
 issuer-registry instance [sym:ContractVersion] = u32:1
+issuer-registry instance [sym:IssuerEpoch] = u64:1
+issuer-registry instance [sym:MaxActiveIssuers] = u32:4294967295
+issuer-registry instance [sym:ReactivationCooldown] = u64:0
 issuer-registry persistent [sym:AddressIssuer, addr:issuer] = bytes:1111111111111111111111111111111111111111111111111111111111111111
 issuer-registry persistent [sym:Issuer, bytes:1111111111111111111111111111111111111111111111111111111111111111] = {sym:created_at: u64:1000, sym:issuer_address: addr:issuer, sym:issuer_id_hash: bytes:1111111111111111111111111111111111111111111111111111111111111111, sym:metadata_hash: bytes:2222222222222222222222222222222222222222222222222222222222222222, sym:status: [sym:Active], sym:updated_at: u64:1000}
 proof-registry instance [sym:Admin] = addr:admin
@@ -26,7 +30,7 @@ protocol-config persistent [sym:SchemaVersion, u32:1] = true
 [events]
 protocol-config topics=[sym:initialized] data={sym:admin: addr:admin}
 protocol-config topics=[sym:schema_approved] data={sym:version: u32:1}
-issuer-registry topics=[sym:issuer_registered] data={sym:created_at: u64:1000, sym:issuer_address: addr:issuer, sym:issuer_id_hash: bytes:1111111111111111111111111111111111111111111111111111111111111111, sym:metadata_hash: bytes:2222222222222222222222222222222222222222222222222222222222222222}
+issuer-registry topics=[sym:issuer_registered] data={sym:created_at: u64:1000, sym:epoch: u64:1, sym:issuer_address: addr:issuer, sym:issuer_id_hash: bytes:1111111111111111111111111111111111111111111111111111111111111111, sym:metadata_hash: bytes:2222222222222222222222222222222222222222222222222222222222222222}
 
 [verdicts]
 protocol-config.is_paused = false

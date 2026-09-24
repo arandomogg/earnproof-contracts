@@ -1,15 +1,19 @@
 # scenario: initialized
-# revision: 4
-# reason: contract version keys are now persisted in initialized ledgers
-# body-digest: 7552ea3b994fbd6209bd7c41023b7a9ef8398e79cc2da6b2d3d38c5182d52b66
+# revision: 5
+# reason: issuer-registry init now stores ActiveIssuerCount MaxActiveIssuers ReactivationCooldown and IssuerEpoch keys
+# body-digest: d10dd880dff62e0d418c2da6c61591ecc278714bb47fcda324c9f60797c0c7c6
 
 [ledger]
 sequence = 1000
 timestamp = 1000
 
 [storage]
+issuer-registry instance [sym:ActiveIssuerCount] = u32:0
 issuer-registry instance [sym:Admin] = addr:admin
 issuer-registry instance [sym:ContractVersion] = u32:1
+issuer-registry instance [sym:IssuerEpoch] = u64:0
+issuer-registry instance [sym:MaxActiveIssuers] = u32:4294967295
+issuer-registry instance [sym:ReactivationCooldown] = u64:0
 proof-registry instance [sym:Admin] = addr:admin
 proof-registry instance [sym:ContractVersion] = u32:1
 proof-registry instance [sym:IssuerRegistry] = addr:issuer-registry

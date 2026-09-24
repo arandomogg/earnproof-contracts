@@ -526,24 +526,20 @@ fn an_invalid_protocol_config_address_aborts_the_registration() {
     let proofs_id = env.register(proof_registry::ProofRegistryContract, ());
     let proofs = proof_registry::ProofRegistryContractClient::new(&env, &proofs_id);
 
-    // Initialize with an invalid config address
+    // Point proof-registry at an address with no contract deployed. The
+    // dependency interface handshake in `initialize` cannot reach it, so
+    // initialization fails closed before any state is written.
     let invalid_config = Address::generate(&env);
-    proofs.initialize(&admin, &issuers_id, &invalid_config);
-
-    let rejection = outcome_of(|| {
-        proofs.try_register_proof(
-            &hash(&env, 0xAB),
-            &commitment(&env, 0xC0),
-            &issuer,
-            &APPROVED_SCHEMA,
-            &(env.ledger().timestamp() + 100_000),
-        )
-    });
-
-    assert_eq!(
-        rejection,
-        Rejection::Aborted,
-        "an invalid dependency address must abort, not produce a typed error"
+    let initialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        proofs.try_initialize(&admin, &issuers_id, &invalid_config)
+    }));
+    assert!(
+        !matches!(initialized, Ok(Ok(_))),
+        "initialization against an undeployed protocol config must fail closed"
+    );
+    assert!(
+        proofs.try_get_admin().is_err(),
+        "a failed initialization must write no admin"
     );
 }
 
@@ -568,23 +564,19 @@ fn an_invalid_issuer_registry_address_aborts_the_registration() {
     let proofs_id = env.register(proof_registry::ProofRegistryContract, ());
     let proofs = proof_registry::ProofRegistryContractClient::new(&env, &proofs_id);
 
-    // Initialize with an invalid issuer registry address
+    // Point proof-registry at an address with no contract deployed. The
+    // interface handshake in `initialize` cannot reach it, so initialization
+    // fails closed before any state is written.
     let invalid_issuers = Address::generate(&env);
-    proofs.initialize(&admin, &invalid_issuers, &config_id);
-
-    let rejection = outcome_of(|| {
-        proofs.try_register_proof(
-            &hash(&env, 0xAC),
-            &commitment(&env, 0xC0),
-            &issuer,
-            &APPROVED_SCHEMA,
-            &(env.ledger().timestamp() + 100_000),
-        )
-    });
-
-    assert_eq!(
-        rejection,
-        Rejection::Aborted,
-        "an invalid dependency address must abort"
+    let initialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        proofs.try_initialize(&admin, &invalid_issuers, &config_id)
+    }));
+    assert!(
+        !matches!(initialized, Ok(Ok(_))),
+        "initialization against an undeployed issuer registry must fail closed"
+    );
+    assert!(
+        proofs.try_get_admin().is_err(),
+        "a failed initialization must write no admin"
     );
 }

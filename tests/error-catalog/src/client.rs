@@ -139,6 +139,7 @@ fn an_automatic_retry_loop_only_repeats_operator_action_codes() {
             "NotInitialized",
             "ProtocolPaused",
             "IssuerInactive",
+            "IssuerCapacityExceeded",
             "InvalidSchemaVersion",
             "SchemaVersionNotApproved",
         ]

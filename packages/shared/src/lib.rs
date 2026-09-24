@@ -49,6 +49,60 @@ pub fn is_zero_or_sentinel_address(address: &Address) -> bool {
     &bytes == ZERO_PAYLOAD_STRKEY
 }
 
+// ---------------------------------------------------------------------------
+// Dependency interface versioning
+//
+// Cross-contract dependencies expose a machine-readable interface version so
+// that a consumer (e.g. proof-registry) can refuse to bind to a dependency
+// whose interface it does not understand.
+//
+// The version follows a semver-style major/minor/patch tuple:
+//   - A `major` bump is a breaking change: the consumer must match it exactly.
+//   - `minor`/`patch` are backward compatible within the same `major`: a
+//     dependency may advance them freely and remain acceptable, but it must be
+//     at least the minimum the consumer requires.
+//
+// Compatibility rule (see `is_interface_compatible`):
+//   actual.major == required.major
+//     && (actual.minor, actual.patch) >= (required.minor, required.patch)
+// ---------------------------------------------------------------------------
+
+/// A machine-readable interface version exposed by a cross-contract dependency.
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct InterfaceVersion {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+
+impl InterfaceVersion {
+    pub const fn new(major: u32, minor: u32, patch: u32) -> Self {
+        InterfaceVersion {
+            major,
+            minor,
+            patch,
+        }
+    }
+}
+
+/// The interface version implemented by `issuer-registry`.
+pub const ISSUER_REGISTRY_INTERFACE_VERSION: InterfaceVersion = InterfaceVersion::new(1, 0, 0);
+
+/// The interface version implemented by `protocol-config`.
+pub const PROTOCOL_CONFIG_INTERFACE_VERSION: InterfaceVersion = InterfaceVersion::new(1, 0, 0);
+
+/// Returns true when `actual` is compatible with the `required` minimum.
+///
+/// The `major` component must match exactly (a breaking-change boundary); the
+/// `minor`/`patch` components of `actual` must be greater than or equal to the
+/// required minimum, compared lexicographically. Newer compatible dependencies
+/// (higher minor/patch, same major) are therefore accepted.
+pub fn is_interface_compatible(required: &InterfaceVersion, actual: &InterfaceVersion) -> bool {
+    actual.major == required.major
+        && (actual.minor, actual.patch) >= (required.minor, required.patch)
+}
+
 pub fn is_valid_principal_address(address: &Address) -> bool {
     let value = address.to_string();
     if value.is_empty() || value.len() as usize != STRKEY_ADDRESS_LEN {
@@ -96,6 +150,9 @@ pub enum ContractError {
     // Input validation errors (60-79)
     InvalidInput = 60,
     InvalidAddress = 61,
+    /// A cross-contract dependency reported an interface version outside the
+    /// range the consumer accepts.
+    IncompatibleInterfaceVersion = 62,
 
     // Protocol state errors (80-99)
     ProtocolPaused = 80,
@@ -114,6 +171,14 @@ pub enum IssuerError {
     IssuerInactive = 205,
     InvalidTransition = 206,
     InvalidAddress = 207,
+    /// Registering or reactivating this issuer would exceed the governed
+    /// maximum active-issuer capacity.
+    IssuerCapacityExceeded = 208,
+    /// A requested capacity limit is below the current active-issuer usage and
+    /// no explicit override was supplied.
+    MaxBelowActiveUsage = 209,
+    /// The suspended issuer's reactivation cooldown has not yet elapsed.
+    ReactivationCooldownActive = 210,
 }
 
 /// Proof-specific errors (300-399).
@@ -173,6 +238,58 @@ pub struct ProofRecord {
 // These utilities provide common patterns for initialization adversarial testing
 // across all contracts, ensuring consistent test coverage for re-initialization
 // guards, invalid dependencies, and state/event immutability on failure.
+
+#[cfg(test)]
+mod interface_version_tests {
+    use super::*;
+
+    const BASE: InterfaceVersion = InterfaceVersion::new(1, 2, 3);
+
+    #[test]
+    fn exact_match_is_compatible() {
+        assert!(is_interface_compatible(&BASE, &BASE));
+    }
+
+    #[test]
+    fn newer_patch_and_minor_within_major_are_compatible() {
+        assert!(is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(1, 2, 4)
+        ));
+        assert!(is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(1, 3, 0)
+        ));
+        assert!(is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(1, 9, 9)
+        ));
+    }
+
+    #[test]
+    fn older_minor_or_patch_is_incompatible() {
+        assert!(!is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(1, 2, 2)
+        ));
+        assert!(!is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(1, 1, 9)
+        ));
+    }
+
+    #[test]
+    fn a_different_major_is_incompatible_in_both_directions() {
+        assert!(!is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(2, 0, 0)
+        ));
+        assert!(!is_interface_compatible(
+            &BASE,
+            &InterfaceVersion::new(0, 9, 9)
+        ));
+    }
+}
 
 #[cfg(test)]
 pub mod test_utils {

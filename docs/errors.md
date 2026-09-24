@@ -82,6 +82,7 @@ A Soroban contract error is a type and a number. It carries no message, no paylo
 | 41 | `NotFound` | `ContractError` | common | reserved | after-caller-change | 404 |
 | 42 | `InvalidState` | `ContractError` | common | reserved | never | 400 |
 | 60 | `InvalidInput` | `ContractError` | common | returned | after-caller-change | 400 |
+| 62 | `IncompatibleInterfaceVersion` | `ContractError` | common | returned | after-caller-change | 400 |
 | 80 | `ProtocolPaused` | `ContractError` | common | reserved | after-operator-action | 503 |
 | 200 | `IssuerAlreadyRegistered` | `IssuerError` | issuer-registry | returned | never | 409 |
 | 201 | `IssuerNotFound` | `IssuerError` | issuer-registry | returned | after-caller-change | 404 |
@@ -90,6 +91,9 @@ A Soroban contract error is a type and a number. It carries no message, no paylo
 | 204 | `IssuerRevoked` | `IssuerError` | issuer-registry | returned | never | 403 |
 | 205 | `IssuerInactive` | `IssuerError` | issuer-registry | reserved | after-operator-action | 403 |
 | 206 | `InvalidTransition` | `IssuerError` | issuer-registry | returned | never | 400 |
+| 208 | `IssuerCapacityExceeded` | `IssuerError` | issuer-registry | returned | after-operator-action | 409 |
+| 209 | `MaxBelowActiveUsage` | `IssuerError` | issuer-registry | returned | after-caller-change | 400 |
+| 210 | `ReactivationCooldownActive` | `IssuerError` | issuer-registry | returned | after-caller-change | 400 |
 | 300 | `ProofAlreadyRegistered` | `ProofError` | proof-registry | returned | never | 409 |
 | 301 | `ProofNotFound` | `ProofError` | proof-registry | returned | after-caller-change | 404 |
 | 302 | `ProofAlreadyRevoked` | `ProofError` | proof-registry | returned | never | 400 |
@@ -175,6 +179,17 @@ A Soroban contract error is a type and a number. It carries no message, no paylo
 - Remediation: Correct the argument. Retrying the identical request will fail identically.
 - Suggested HTTP status: 400
 - Client message: "Invalid input provided"
+
+### 62 - `IncompatibleInterfaceVersion`
+
+- Enum: `ContractError`
+- Domain: common
+- Status: returned
+- Retry: after-caller-change
+- Cause: A cross-contract dependency reported an interface version outside the range the consumer accepts, during initialization or a governed dependency replacement.
+- Remediation: Bind a dependency whose interface version is compatible: same major and at least the minor and patch the consumer requires. Read the accepted version from the consumer before retrying.
+- Suggested HTTP status: 400
+- Client message: "Incompatible dependency version"
 
 ### 80 - `ProtocolPaused`
 
@@ -263,6 +278,39 @@ A Soroban contract error is a type and a number. It carries no message, no paylo
 - Remediation: Read the current status and choose a permitted transition.
 - Suggested HTTP status: 400
 - Client message: "Invalid status transition"
+
+### 208 - `IssuerCapacityExceeded`
+
+- Enum: `IssuerError`
+- Domain: issuer-registry
+- Status: returned
+- Retry: after-operator-action
+- Cause: register_issuer or reactivate_issuer would push the active-issuer count above the governed maximum capacity.
+- Remediation: Wait for an issuer to be suspended or revoked, or have an admin raise the maximum active-issuer capacity. Read get_active_issuer_count and get_max_active_issuers to see the headroom.
+- Suggested HTTP status: 409
+- Client message: "Issuer capacity reached"
+
+### 209 - `MaxBelowActiveUsage`
+
+- Enum: `IssuerError`
+- Domain: issuer-registry
+- Status: returned
+- Retry: after-caller-change
+- Cause: set_max_active_issuers was asked to set a limit below the current active-issuer count without the explicit below-usage override.
+- Remediation: Pass a limit at or above the current active count, or set the override flag to ratchet the ceiling down deliberately. Retrying the identical request will fail identically.
+- Suggested HTTP status: 400
+- Client message: "Capacity limit below current usage"
+
+### 210 - `ReactivationCooldownActive`
+
+- Enum: `IssuerError`
+- Domain: issuer-registry
+- Status: returned
+- Retry: after-caller-change
+- Cause: reactivate_issuer was called before the suspended issuer's reactivation cooldown had elapsed.
+- Remediation: Wait until the ledger time returned by get_earliest_reactivation before retrying. The deadline is fixed at suspension time and does not move.
+- Suggested HTTP status: 400
+- Client message: "Reactivation cooldown has not elapsed"
 
 ### 300 - `ProofAlreadyRegistered`
 

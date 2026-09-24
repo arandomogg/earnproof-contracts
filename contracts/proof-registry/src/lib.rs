@@ -1,22 +1,31 @@
 #![no_std]
 
 use earnproof_shared::{
-    ContractError, ProofError, ProofRecord, ProofStatus, TTL_EXTEND_TO_LEDGERS,
-    TTL_THRESHOLD_LEDGERS,
+    is_interface_compatible, ContractError, InterfaceVersion, ProofError, ProofRecord, ProofStatus,
+    TTL_EXTEND_TO_LEDGERS, TTL_THRESHOLD_LEDGERS,
 };
 use soroban_sdk::{
     contract, contractclient, contractevent, contractimpl, contracttype, Address, BytesN, Env,
 };
 
+/// Minimum `issuer-registry` interface version this contract can bind to.
+/// A dependency must report the same major and at least this minor/patch.
+const REQUIRED_ISSUER_REGISTRY_VERSION: InterfaceVersion = InterfaceVersion::new(1, 0, 0);
+
+/// Minimum `protocol-config` interface version this contract can bind to.
+const REQUIRED_PROTOCOL_CONFIG_VERSION: InterfaceVersion = InterfaceVersion::new(1, 0, 0);
+
 #[contractclient(name = "ProtocolConfigContractClient")]
 pub trait ProtocolConfigInterface {
     fn is_paused(env: Env) -> bool;
     fn is_schema_version_approved(env: Env, version: u32) -> bool;
+    fn interface_version(env: Env) -> InterfaceVersion;
 }
 
 #[contractclient(name = "IssuerRegistryContractClient")]
 pub trait IssuerRegistryInterface {
     fn is_active_address(env: Env, issuer_address: Address) -> bool;
+    fn interface_version(env: Env) -> InterfaceVersion;
 }
 
 #[contract]
@@ -75,6 +84,9 @@ impl ProofRegistryContract {
 
         Self::require_valid_principal(&admin)?;
         Self::validate_dependency_addresses(&env, &issuer_registry, &protocol_config)?;
+        // Reject dependencies whose interface this contract does not understand
+        // before any state is written, so a failed handshake mutates nothing.
+        Self::require_compatible_dependencies(&env, &issuer_registry, &protocol_config)?;
         Self::require_auth(&admin);
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
@@ -216,6 +228,84 @@ impl ProofRegistryContract {
             .ok_or(ContractError::NotInitialized)
     }
 
+    // ── dependency interface handshake ────────────────────────────────────────
+
+    /// Minimum `issuer-registry` interface version this contract accepts. A
+    /// bound dependency must report the same major and at least this
+    /// minor/patch (see `earnproof_shared::is_interface_compatible`).
+    pub fn accepted_issuer_registry_version(_env: Env) -> InterfaceVersion {
+        REQUIRED_ISSUER_REGISTRY_VERSION
+    }
+
+    /// Minimum `protocol-config` interface version this contract accepts.
+    pub fn accepted_protocol_config_version(_env: Env) -> InterfaceVersion {
+        REQUIRED_PROTOCOL_CONFIG_VERSION
+    }
+
+    /// Live interface version currently reported by the bound issuer registry.
+    pub fn bound_issuer_registry_version(env: Env) -> Result<InterfaceVersion, ContractError> {
+        let address = Self::get_issuer_registry(env.clone())?;
+        Ok(IssuerRegistryContractClient::new(&env, &address).interface_version())
+    }
+
+    /// Live interface version currently reported by the bound protocol config.
+    pub fn bound_protocol_config_version(env: Env) -> Result<InterfaceVersion, ContractError> {
+        let address = Self::get_protocol_config(env.clone())?;
+        Ok(ProtocolConfigContractClient::new(&env, &address).interface_version())
+    }
+
+    /// Admin-only: replace the bound issuer registry.
+    ///
+    /// The replacement is validated as a distinct, well-formed principal and
+    /// must pass the interface handshake before it is stored. The check is not
+    /// gated by any paused state and does not run through the upgrade flow, so
+    /// it cannot be bypassed.
+    pub fn set_issuer_registry(
+        env: Env,
+        new_issuer_registry: Address,
+    ) -> Result<(), ContractError> {
+        let admin = Self::get_admin(env.clone())?;
+        Self::require_auth(&admin);
+
+        let protocol_config = Self::get_protocol_config(env.clone())?;
+        Self::validate_dependency_addresses(&env, &new_issuer_registry, &protocol_config)?;
+        let actual =
+            IssuerRegistryContractClient::new(&env, &new_issuer_registry).interface_version();
+        if !is_interface_compatible(&REQUIRED_ISSUER_REGISTRY_VERSION, &actual) {
+            return Err(ContractError::IncompatibleInterfaceVersion);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::IssuerRegistry, &new_issuer_registry);
+        Self::extend_instance_ttl(env);
+        Ok(())
+    }
+
+    /// Admin-only: replace the bound protocol config. Same guarantees as
+    /// `set_issuer_registry`.
+    pub fn set_protocol_config(
+        env: Env,
+        new_protocol_config: Address,
+    ) -> Result<(), ContractError> {
+        let admin = Self::get_admin(env.clone())?;
+        Self::require_auth(&admin);
+
+        let issuer_registry = Self::get_issuer_registry(env.clone())?;
+        Self::validate_dependency_addresses(&env, &issuer_registry, &new_protocol_config)?;
+        let actual =
+            ProtocolConfigContractClient::new(&env, &new_protocol_config).interface_version();
+        if !is_interface_compatible(&REQUIRED_PROTOCOL_CONFIG_VERSION, &actual) {
+            return Err(ContractError::IncompatibleInterfaceVersion);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::ProtocolConfig, &new_protocol_config);
+        Self::extend_instance_ttl(env);
+        Ok(())
+    }
+
     // ── upgrade governance ────────────────────────────────────────────────────
 
     /// Returns the stored monotonic contract version.  Starts at 1.
@@ -347,6 +437,26 @@ impl ProofRegistryContract {
     fn require_valid_principal(address: &Address) -> Result<(), ContractError> {
         if !earnproof_shared::is_valid_principal_address(address) {
             return Err(ContractError::InvalidInput);
+        }
+        Ok(())
+    }
+
+    /// Queries each dependency's interface version and rejects any that is not
+    /// compatible with the range this contract requires.
+    fn require_compatible_dependencies(
+        env: &Env,
+        issuer_registry: &Address,
+        protocol_config: &Address,
+    ) -> Result<(), ContractError> {
+        let issuer_version =
+            IssuerRegistryContractClient::new(env, issuer_registry).interface_version();
+        if !is_interface_compatible(&REQUIRED_ISSUER_REGISTRY_VERSION, &issuer_version) {
+            return Err(ContractError::IncompatibleInterfaceVersion);
+        }
+        let config_version =
+            ProtocolConfigContractClient::new(env, protocol_config).interface_version();
+        if !is_interface_compatible(&REQUIRED_PROTOCOL_CONFIG_VERSION, &config_version) {
+            return Err(ContractError::IncompatibleInterfaceVersion);
         }
         Ok(())
     }
@@ -1542,5 +1652,134 @@ mod test {
         assert!(pc_client.is_paused());
         pc_client.unpause();
         assert!(!pc_client.is_paused());
+    }
+
+    // ── issue 178: dependency interface version handshake ──────────────────────
+
+    use earnproof_shared::InterfaceVersion;
+    use soroban_sdk::{contract, contractimpl};
+
+    /// A dependency whose major version differs, so it is rejected.
+    #[contract]
+    pub struct IncompatibleDependency;
+
+    #[contractimpl]
+    impl IncompatibleDependency {
+        pub fn is_active_address(_env: Env, _issuer_address: Address) -> bool {
+            true
+        }
+        pub fn is_paused(_env: Env) -> bool {
+            false
+        }
+        pub fn is_schema_version_approved(_env: Env, _version: u32) -> bool {
+            true
+        }
+        pub fn interface_version(_env: Env) -> InterfaceVersion {
+            InterfaceVersion::new(99, 0, 0)
+        }
+    }
+
+    /// A dependency that advances minor/patch within the same major, which the
+    /// compatibility rule accepts.
+    #[contract]
+    pub struct NewerCompatibleDependency;
+
+    #[contractimpl]
+    impl NewerCompatibleDependency {
+        pub fn is_active_address(_env: Env, _issuer_address: Address) -> bool {
+            true
+        }
+        pub fn is_paused(_env: Env) -> bool {
+            false
+        }
+        pub fn is_schema_version_approved(_env: Env, _version: u32) -> bool {
+            true
+        }
+        pub fn interface_version(_env: Env) -> InterfaceVersion {
+            InterfaceVersion::new(1, 5, 3)
+        }
+    }
+
+    #[test]
+    fn exposes_accepted_dependency_versions() {
+        let (_env, client, ..) = setup();
+        assert_eq!(client.accepted_issuer_registry_version().major, 1);
+        assert_eq!(client.accepted_protocol_config_version().major, 1);
+    }
+
+    #[test]
+    fn reports_bound_dependency_versions() {
+        let (_env, client, ..) = setup();
+        assert_eq!(
+            client.bound_issuer_registry_version(),
+            earnproof_shared::ISSUER_REGISTRY_INTERFACE_VERSION
+        );
+        assert_eq!(
+            client.bound_protocol_config_version(),
+            earnproof_shared::PROTOCOL_CONFIG_INTERFACE_VERSION
+        );
+    }
+
+    #[test]
+    fn initialization_rejects_incompatible_dependency_before_state_mutation() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::from_str(&env, ADMIN);
+        let good_config = env.register(ProtocolConfigContract, ());
+        let bad_registry = env.register(IncompatibleDependency, ());
+
+        let proofs_id = env.register(ProofRegistryContract, ());
+        let proofs = ProofRegistryContractClient::new(&env, &proofs_id);
+        let result = proofs.try_initialize(&admin, &bad_registry, &good_config);
+        assert_eq!(
+            result,
+            Err(Ok(
+                earnproof_shared::ContractError::IncompatibleInterfaceVersion
+            ))
+        );
+        // No admin was written: the contract remains uninitialized.
+        assert!(proofs.try_get_admin().is_err());
+    }
+
+    #[test]
+    fn governed_replacement_accepts_a_newer_compatible_dependency() {
+        let (env, client, ..) = setup();
+        let newer = env.register(NewerCompatibleDependency, ());
+        client.set_issuer_registry(&newer);
+        assert_eq!(client.get_issuer_registry(), newer);
+        assert_eq!(client.bound_issuer_registry_version().minor, 5);
+    }
+
+    #[test]
+    fn governed_replacement_rejects_an_incompatible_dependency() {
+        let (env, client, ..) = setup();
+        let original = client.get_issuer_registry();
+        let bad = env.register(IncompatibleDependency, ());
+
+        let result = client.try_set_issuer_registry(&bad);
+        assert_eq!(
+            result,
+            Err(Ok(
+                earnproof_shared::ContractError::IncompatibleInterfaceVersion
+            ))
+        );
+        // The binding is unchanged: the rejected replacement mutated nothing.
+        assert_eq!(client.get_issuer_registry(), original);
+    }
+
+    #[test]
+    fn governed_replacement_is_not_bypassed_by_paused_state() {
+        let (env, client, protocol_config, ..) = setup();
+        protocol_config.pause();
+        let bad = env.register(IncompatibleDependency, ());
+
+        // Even while paused, the interface check still runs and rejects.
+        let result = client.try_set_issuer_registry(&bad);
+        assert_eq!(
+            result,
+            Err(Ok(
+                earnproof_shared::ContractError::IncompatibleInterfaceVersion
+            ))
+        );
     }
 }

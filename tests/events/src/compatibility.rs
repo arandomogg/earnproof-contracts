@@ -34,18 +34,31 @@ const DECLARED_EVENTS: &[(&str, &[&str])] = &[
             "issuer_address",
             "metadata_hash",
             "created_at",
+            "epoch",
         ],
     ),
     (
         "issuer_metadata_updated",
-        &["issuer_id_hash", "metadata_hash", "updated_at"],
+        &["issuer_id_hash", "metadata_hash", "updated_at", "epoch"],
     ),
-    ("issuer_suspended", &["issuer_id_hash", "updated_at"]),
-    ("issuer_reactivated", &["issuer_id_hash", "updated_at"]),
-    ("issuer_revoked", &["issuer_id_hash", "updated_at"]),
+    (
+        "issuer_suspended",
+        &["issuer_id_hash", "updated_at", "epoch"],
+    ),
+    (
+        "issuer_reactivated",
+        &["issuer_id_hash", "updated_at", "epoch"],
+    ),
+    ("issuer_revoked", &["issuer_id_hash", "updated_at", "epoch"]),
     (
         "issuer_address_rotated",
-        &["issuer_id_hash", "old_address", "new_address", "updated_at"],
+        &[
+            "issuer_id_hash",
+            "old_address",
+            "new_address",
+            "updated_at",
+            "epoch",
+        ],
     ),
 ];
 

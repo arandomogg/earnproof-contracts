@@ -1,6 +1,9 @@
 #![no_std]
 
-use earnproof_shared::{ContractError, TTL_EXTEND_TO_LEDGERS, TTL_THRESHOLD_LEDGERS};
+use earnproof_shared::{
+    ContractError, InterfaceVersion, PROTOCOL_CONFIG_INTERFACE_VERSION, TTL_EXTEND_TO_LEDGERS,
+    TTL_THRESHOLD_LEDGERS,
+};
 use soroban_sdk::{contract, contractevent, contractimpl, contracttype, Address, BytesN, Env};
 
 #[contract]
@@ -106,6 +109,11 @@ impl ProtocolConfigContract {
             .instance()
             .get(&DataKey::Admin)
             .ok_or(ContractError::NotInitialized)
+    }
+
+    /// Machine-readable interface version this contract exposes to consumers.
+    pub fn interface_version(_env: Env) -> InterfaceVersion {
+        PROTOCOL_CONFIG_INTERFACE_VERSION
     }
 
     pub fn set_admin(env: Env, new_admin: Address) -> Result<(), ContractError> {
@@ -381,6 +389,14 @@ mod test {
     }
 
     // ── existing tests ────────────────────────────────────────────────────────
+
+    #[test]
+    fn exposes_a_stable_interface_version() {
+        let (_env, client, _admin) = setup();
+        let version = client.interface_version();
+        assert_eq!(version, earnproof_shared::PROTOCOL_CONFIG_INTERFACE_VERSION);
+        assert_eq!(version.major, 1);
+    }
 
     #[test]
     fn initializes_config_defaults() {

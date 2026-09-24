@@ -86,7 +86,15 @@ pub struct StorageNamespace {
 /// Adding a row here is the second half of adding a storage key; the first is
 /// adding the `DataKey` variant. Doing one without the other fails the tests in
 /// `tests/storage-keys/`.
-pub const STORAGE_NAMESPACES: [StorageNamespace; 14] = [
+pub const STORAGE_NAMESPACES: [StorageNamespace; 19] = [
+    StorageNamespace {
+        contract: "issuer-registry",
+        namespace: "ActiveIssuerCount",
+        arity: 0,
+        class: StorageClass::Instance,
+        value: "u32",
+        owner: "registry operator",
+    },
     StorageNamespace {
         contract: "issuer-registry",
         namespace: "AddressIssuer",
@@ -117,6 +125,38 @@ pub const STORAGE_NAMESPACES: [StorageNamespace; 14] = [
         arity: 1,
         class: StorageClass::Persistent,
         value: "IssuerRecord",
+        owner: "registry operator",
+    },
+    StorageNamespace {
+        contract: "issuer-registry",
+        namespace: "IssuerEpoch",
+        arity: 0,
+        class: StorageClass::Instance,
+        value: "u64",
+        owner: "registry operator",
+    },
+    StorageNamespace {
+        contract: "issuer-registry",
+        namespace: "MaxActiveIssuers",
+        arity: 0,
+        class: StorageClass::Instance,
+        value: "u32",
+        owner: "registry operator",
+    },
+    StorageNamespace {
+        contract: "issuer-registry",
+        namespace: "ReactivatableAt",
+        arity: 1,
+        class: StorageClass::Persistent,
+        value: "u64",
+        owner: "registry operator",
+    },
+    StorageNamespace {
+        contract: "issuer-registry",
+        namespace: "ReactivationCooldown",
+        arity: 0,
+        class: StorageClass::Instance,
+        value: "u64",
         owner: "registry operator",
     },
     StorageNamespace {

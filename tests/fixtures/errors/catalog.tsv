@@ -8,6 +8,7 @@
 41	NotFound	ContractError	common	reserved	after-caller-change	404
 42	InvalidState	ContractError	common	reserved	never	400
 60	InvalidInput	ContractError	common	returned	after-caller-change	400
+62	IncompatibleInterfaceVersion	ContractError	common	returned	after-caller-change	400
 80	ProtocolPaused	ContractError	common	reserved	after-operator-action	503
 200	IssuerAlreadyRegistered	IssuerError	issuer-registry	returned	never	409
 201	IssuerNotFound	IssuerError	issuer-registry	returned	after-caller-change	404
@@ -16,6 +17,9 @@
 204	IssuerRevoked	IssuerError	issuer-registry	returned	never	403
 205	IssuerInactive	IssuerError	issuer-registry	reserved	after-operator-action	403
 206	InvalidTransition	IssuerError	issuer-registry	returned	never	400
+208	IssuerCapacityExceeded	IssuerError	issuer-registry	returned	after-operator-action	409
+209	MaxBelowActiveUsage	IssuerError	issuer-registry	returned	after-caller-change	400
+210	ReactivationCooldownActive	IssuerError	issuer-registry	returned	after-caller-change	400
 300	ProofAlreadyRegistered	ProofError	proof-registry	returned	never	409
 301	ProofNotFound	ProofError	proof-registry	returned	after-caller-change	404
 302	ProofAlreadyRevoked	ProofError	proof-registry	returned	never	400
